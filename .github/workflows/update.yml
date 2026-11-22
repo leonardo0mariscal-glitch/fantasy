@@ -1,16 +1,18 @@
 name: Actualizar liga
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "17 * * * *"   # respaldo: si la cadena se rompe, esto la reinicia
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: update
   cancel-in-progress: false
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 345
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,16 +21,27 @@ jobs:
       - name: Recuperar estado de avisos
         run: |
           git fetch --depth=1 origin data 2>/dev/null && git show FETCH_HEAD:state.json > state.json 2>/dev/null || echo '{"gold":{}}' > state.json
-      - name: Leer ESPN
+      - name: Leer ESPN cada 2 minutos (unas 5 horas)
         env:
           ESPN_S2: ${{ secrets.ESPN_S2 }}
           ESPN_SWID: ${{ secrets.ESPN_SWID }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-        run: python fetch_espn.py
-      - name: Publicar datos (rama data, un solo commit)
         run: |
-          mkdir /tmp/pub && cp data.json state.json /tmp/pub/ && cd /tmp/pub
-          git init -q -b data
-          git config user.name robot && git config user.email robot@users.noreply.github.com
-          git add . && git commit -qm "datos $(date -u +%FT%TZ)"
-          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data
+          end=$(( $(date +%s) + 19800 ))
+          echo "CONTINUE=1" >> "$GITHUB_ENV"
+          while [ "$(date +%s)" -lt "$end" ]; do
+            python fetch_espn.py && rc=0 || rc=$?
+            if [ "$rc" -eq 3 ]; then echo "Cookies caducadas: no se relanza"; echo "CONTINUE=0" >> "$GITHUB_ENV"; exit 0; fi
+            if [ "$rc" -eq 0 ]; then
+              rm -rf /tmp/pub && mkdir /tmp/pub && cp data.json state.json /tmp/pub/
+              (cd /tmp/pub && git init -q -b data && git config user.name robot && git config user.email robot@users.noreply.github.com \
+                && git add . && git commit -qm "datos $(date -u +%FT%TZ)" \
+                && git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data) || echo "no pude publicar esta vez"
+            fi
+            sleep 120
+          done
+      - name: Relanzar la cadena
+        if: always() && env.CONTINUE == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run update.yml --repo "${{ github.repository }}" --ref main
