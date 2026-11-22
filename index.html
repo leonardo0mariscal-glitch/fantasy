@@ -122,7 +122,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'b'};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l'};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -238,7 +238,7 @@ function remaining(t){
 /* movimientos sugeridos: agregar un agente libre y soltar a alguien, sin tocar a los protegidos */
 /* ---------- reglas de cambios ---------- */
 const autoProt=R=>new Set(R.filter(p=>p.slot!=='IR').sort((a,b)=>b.e-a.e).slice(0,7).map(p=>p.n));
-const hdOf=k=>k==='b'?[...hdays('c'),...hdays('n')]:horizon(k);
+const hdOf=k=>k==='b'?[...hdays('c'),...hdays('n')]:k==='rc'?hdays('c'):k==='rn'?hdays('n'):horizon(k);
 function evalSwap(R0,f,d,hd,base){
   const R=R0.filter(x=>x.n!==d.n).concat([{...f,slot:'BE',from:(f.ws==='W'?NS():null)}]);
   const rows=hd.map((day,i)=>{const sk=day===todayKey();const a=base?base[i]:bestDay(R0,day,sk).tot,b=bestDay(R,day,sk).tot;return {day,a,b,diff:b-a}});
@@ -497,60 +497,133 @@ function radarView(){
     <div id="rres">${radarResults()}</div>`;
 }
 const sgn=x=>(x>=0?'+':'−')+f0(Math.abs(x));
+const leftIn=(tm,hd)=>hd.reduce((n,d)=>{const g=game(tm,d);return n+((g&&!started(d,g.time))?1:0)},0);
+const pl=(n,w)=>n+' '+(n===1?w:w+'s');
 function radarSheet(name){
   const f0p=findAny(name); if(!f0p)return '<div class="mut">No encontré a este jugador.</div>';
-  const f={...f0p,slot:'BE'};
-  const R0=roster(team(S.me)), AP=autoProt(R0), hdB=hdOf('b'), hdC=hdays('c'), hdN=hdays('n');
+  const f={...f0p,slot:'BE'}, me=team(S.me), M=st.rh;               // M: 'c' esta semana · 'n' la siguiente · 'l' largo plazo
+  const R0=roster(me), AP=autoProt(R0), hdB=hdOf('b'), hdC=hdays('c'), hdN=hdays('n');
   const base=hdB.map(d=>bestDay(R0,d,d===todayKey()).tot), fe=f.e*avail(f);
+  const flC=leftIn(f.t,hdC), flN=gamesIn(f.t,hdN), out=avail(f)===0;
   const rows=R0.map(d=>{
     const ev=evalSwap(R0,f,d,hdB,base);
-    const gC=ev.rows.filter(r=>hdC.includes(r.day)).reduce((a,r)=>a+r.diff,0), gN=ev.rows.filter(r=>hdN.includes(r.day)).reduce((a,r)=>a+r.diff,0);
-    return {d,gC,gN,gain:ev.gain,ir:d.slot==='IR',guard:st.prot.has(d.n)||AP.has(d.n),de:d.e*avail(d)};
+    const gC=ev.rows.filter(r=>hdC.includes(r.day)).reduce((a,r)=>a+r.diff,0), gN=ev.rows.filter(r=>hdN.includes(r.day)).reduce((a,r)=>a+r.diff,0), de=d.e*avail(d);
+    return {d,gC,gN,gain:ev.gain,ir:d.slot==='IR',guard:st.prot.has(d.n)||AP.has(d.n),de,pg:fe-de,lc:leftIn(d.t,hdC),ln:gamesIn(d.t,hdN)};
   });
-  const gv=r=>st.rh==='c'?r.gC:st.rh==='n'?r.gN:r.gain;
-  const free=rows.filter(r=>!r.guard&&!r.ir).sort((a,b)=>b.gain-a.gain);   // a los de IR no los recomiendo soltar solos: pueden volver
-  const best=free.length&&free[0].gain>0.5?free[0]:null;
-  const topGuard=rows.filter(r=>r.guard&&!r.ir).sort((a,b)=>b.gain-a.gain)[0];
-  let verdict,vpill='';
-  if(f.inj==='O'||f.inj==='IR'||f.inj==='SUS') verdict=`Ahorita no: ${esc(f.n)} está fuera y no suma puntos hasta que regrese. Si lo quieres para cuando vuelva, mejor déjalo en tu radar.`;
-  else if(best){
-    const lab=labelOf(f,best.d); vpill=`<span class="pill ${lab==='Para mucho tiempo'?'good':'amber'}">${lab}</span>`;
-    verdict=`Sí te conviene: soltando a <b>${esc(best.d.n)}</b> sumas ≈${sgn(best.gain)} pts en dos semanas (esta semana ${sgn(best.gC)}, la siguiente ${sgn(best.gN)}). `+(lab==='Para mucho tiempo'?'Rinde claramente más por partido, así que sirve para quedártelo.':'La ganancia viene de que juega más partidos o de una racha; úsalo para esta semana y revisa después.');
-  } else if(topGuard&&topGuard.gain>2) verdict=`Solo saldría bien soltando a ${esc(topGuard.d.n)}, pero es de tus mejores: no te lo recomiendo.`;
-  else verdict=`Ahorita no te conviene: con ninguno de tus jugadores soltables sumas puntos. ${esc(f.n)} rinde ${f1(fe)} pts por partido y a tus más flojos les ganas poco o nada.`;
-  // ¿hay alguien mejor? mismo jugador a soltar, probando a los agentes libres que sigo
-  const dStar=best?best.d:(free[0]&&free[0].d);
-  let alt=[];
-  if(dStar&&avail(f)>0){
-    const cands=S.fa.map(mkF).filter(g=>g.n!==f.n&&avail(g)>0).map(g=>({g,v:g.e*avail(g)*gamesIn(g.t,hdB)})).sort((a,b)=>b.v-a.v).slice(0,18);
-    for(const {g} of cands){const ev=evalSwap(R0,{...g,slot:'BE'},dStar,hdB,base); if(ev.gain>(best?best.gain:0)+2)alt.push({add:g,drop:dStar,gain:ev.gain,label:labelOf(g,dStar)});}
-    alt.sort((a,b)=>b.gain-a.gain); alt=alt.slice(0,3);
+  const mv=r=>M==='c'?r.gC:M==='n'?r.gN:r.pg;
+  const okRow=r=>M==='c'?r.gC>0.5:M==='n'?r.gN>0.5:(r.pg>0&&r.gain>0.5);
+  const free=rows.filter(r=>!r.guard&&!r.ir).sort((a,b)=>mv(b)-mv(a));
+  const best=free.find(okRow)||null, cand=best||free[0]||null;
+  const topGuard=rows.filter(r=>r.guard&&!r.ir&&okRow(r)&&(M==='l'?r.pg>=3:mv(r)>2)).sort((a,b)=>mv(b)-mv(a))[0];
+  const tr=(f.l15!=null&&f.s!=null)?f.l15-f.s:null, left7=7-me.acq;
+  const per={c:'esta semana',n:'la siguiente semana',l:'largo plazo'}[M];
+  let text,reasons=[],pill='';
+  const wk=M==='c'?{fl:flC,g:r=>r.gC,dl:r=>r.lc,mov:`Gasta 1 de los ${left7} movimientos que te quedan esta semana.`}:{fl:flN,g:r=>r.gN,dl:r=>r.ln,mov:'Gasta 1 de tus 7 movimientos de la semana siguiente.'};
+  if(out){
+    text=`Ahorita no: ${esc(f.n)} está fuera y no suma puntos hasta que regrese.`;
+    reasons.push('Si lo quieres para cuando vuelva, déjalo en tu radar y revisa su estado más adelante.');
+  } else if(M!=='l'){
+    const fl=wk.fl, games=pl(fl,'partido');
+    if(M==='c'&&f.ws==='W'){ text=`No sirve para esta semana: ${esc(f.n)} está en waivers y no entra a tu equipo hasta la siguiente.`; reasons.push('Mira la pestaña "Siguiente" para ver si te conviene para esa semana.'); }
+    else if(fl===0){
+      text=`No te sirve para ${per}: ${M==='c'?`a ${esc(f.n)} ya no le quedan partidos en lo que resta de la semana`:`${esc(f.n)} no tiene partidos esa semana`}.`;
+      reasons.push('Un jugador sin partidos no suma nada y solo te gastaría un movimiento.');
+    } else if(best){
+      const d=best.d, dlc=wk.dl(best), gg=wk.g(best);
+      text=`Sí te conviene para ${per}: soltando a <b>${esc(d.n)}</b> sumas ≈${sgn(gg)} pts.`;
+      pill=`<span class="pill good">Vale la pena ${per}</span>`;
+      reasons.push(`${esc(f.n)} te juega ${games} ${M==='c'?'más esta semana':'esa semana'}, a ≈${f1(fe)} pts por partido (≈${f0(fl*fe)} pts en total).`);
+      reasons.push(dlc===0?`${esc(d.n)} ${M==='c'?'ya no juega esta semana':'no juega esa semana'}, así que soltarlo no te quita puntos.`:`${esc(d.n)} te juega ${pl(dlc,'partido')} (≈${f1(best.de)} por partido); con tu mejor alineación el cambio neto es ≈${sgn(gg)}.`);
+      if(M==='c'){reasons.push('Es una jugada de corto plazo: al terminar la semana puedes soltarlo, pero quien sueltes lo puede recoger otro (waivers de 1 día).');}
+      else if(f.ws==='W'){reasons.push('Está en waivers: lo pides ahora y entra a tiempo para esa semana, aunque puede que no te lo den.');}
+      reasons.push(gg<8?`La ganancia es chica para gastar un movimiento. ${wk.mov}`:wk.mov);
+      if(f.gp<8)reasons.push(`Ojo: solo lleva ${f.gp} partidos jugados, el promedio puede engañar.`);
+    } else if(topGuard){
+      text=`Solo sale bien soltando a ${esc(topGuard.d.n)}, pero es de tus mejores o lo protegiste tú: no te lo recomiendo ${per}.`;
+      pill='<span class="pill">No conviene</span>';
+    } else {
+      text=`No te conviene para ${per}: ${esc(f.n)} no te suma puntos con ninguno de tus jugadores que puedes soltar.`;
+      pill='<span class="pill">No conviene</span>';
+      if(cand){
+        const dlc=wk.dl(cand);
+        reasons.push(`El menos malo es soltar a ${esc(cand.d.n)}: ${sgn(wk.g(cand))} pts ${per}.`);
+        if(dlc>=fl)reasons.push(`${esc(cand.d.n)} te juega ${pl(dlc,'partido')} y ${esc(f.n)} ${pl(fl,'partido')}: no ganas partidos.`);
+        if(fe<=cand.de+1)reasons.push(`${esc(f.n)} rinde ${f1(fe)} por partido y ${esc(cand.d.n)} ${f1(cand.de)}: no rinde más.`);
+        else if(dlc<fl)reasons.push(`Aunque juega más partidos, tus espacios de posición ya están ocupados esos días y no hay hueco que aproveche.`);
+      }
+    }
+  } else {
+    if(best){
+      const d=best.d, lab=labelOf(f,d);
+      if(lab==='Para mucho tiempo'){
+        text=`Sí te conviene a largo plazo: soltando a <b>${esc(d.n)}</b> mejoras ≈${f1(best.pg)} pts por partido.`;
+        pill='<span class="pill good">Para mucho tiempo</span>';
+        reasons.push(`${esc(f.n)} rinde ${f1(fe)} por partido y ${esc(d.n)} ${f1(best.de)}: la diferencia viene de su nivel, no de cuántos partidos tenga una semana.`);
+        reasons.push(`En las próximas dos semanas eso son ≈${sgn(best.gain)} pts (esta semana ${sgn(best.gC)}, la siguiente ${sgn(best.gN)}).`);
+        if(tr!=null&&tr>=3)reasons.push(`Además viene subiendo: ${f1(f.l15)} en sus últimos 15 contra ${f1(f.s)} de temporada.`);
+        if(tr!=null&&tr<=-3)reasons.push(`Ojo: viene bajando (${f1(f.l15)} en sus últimos 15 contra ${f1(f.s)} de temporada).`);
+        reasons.push(`Lleva ${f.gp} partidos jugados, suficiente muestra para fiarse.`);
+        if(best.gC<-2)reasons.push(`Si lo haces ahorita te cuesta ${f0(-best.gC)} pts esta semana; si lo haces después del domingo no pierdes esos puntos.`);
+      } else {
+        text=`Todavía no para largo plazo: soltando a ${esc(d.n)} solo mejoras ≈${f1(best.pg)} pts por partido${f.gp<8?` y ${esc(f.n)} lleva apenas ${f.gp} partidos jugados`:''}.`;
+        pill='<span class="pill amber">Todavía no</span>';
+        if(best.pg<3)reasons.push('Para quedártelo conviene que rinda al menos 3 pts más por partido que a quien sueltas: gastas un movimiento y a '+esc(d.n)+' lo puede recoger otro.');
+        if(f.gp<8)reasons.push(`Con ${f.gp} partidos jugados la muestra es chica; espera a ver si sostiene el nivel.`);
+        if(best.gC>0.5||best.gN>0.5)reasons.push(`Sí te sirve como jugada corta: ${best.gC>0.5?`esta semana ≈${sgn(best.gC)}`:''}${best.gC>0.5&&best.gN>0.5?' y ':''}${best.gN>0.5?`la siguiente ≈${sgn(best.gN)}`:''}. Mira esas pestañas.`);
+      }
+    } else if(topGuard){
+      text=`Solo sale bien soltando a ${esc(topGuard.d.n)}, pero es de tus mejores o lo protegiste tú: no te lo recomiendo.`;
+      pill='<span class="pill">No conviene</span>';
+    } else {
+      const w=[...free].sort((a,b)=>a.de-b.de)[0];
+      text=`No te conviene a largo plazo: ${esc(f.n)} rinde ${f1(fe)} pts por partido y no supera a ninguno de tus jugadores que puedes soltar.`;
+      pill='<span class="pill">No conviene</span>';
+      if(w)reasons.push(`El más flojo que podrías soltar es ${esc(w.d.n)} con ${f1(w.de)} por partido.`);
+    }
   }
-  const tr=(f.l15!=null&&f.s!=null)?f.l15-f.s:null, gC=gamesIn(f.t,hdC), gN=gamesIn(f.t,hdN), why=[];
+  // ¿hay alguien mejor? mismo jugador a soltar, probando a los agentes libres que sigo, con la métrica del horizonte elegido
+  const dStar=cand&&cand.d; let alt=[];
+  if(dStar&&!out){
+    const hd=M==='c'?hdC:M==='n'?hdN:hdB, bs=M==='c'?base.slice(0,hdC.length):M==='n'?base.slice(hdC.length):base;
+    const mine=best?(M==='l'?best.pg:mv(best)):0;
+    const cs=S.fa.map(mkF).filter(g=>g.n!==f.n&&avail(g)>0).map(g=>({g,v:g.e*avail(g)*gamesIn(g.t,hd)})).sort((a,b)=>b.v-a.v).slice(0,18);
+    for(const {g} of cs){
+      const ev=evalSwap(R0,{...g,slot:'BE'},dStar,hd,bs), pgg=g.e*avail(g)-dStar.e*avail(dStar);
+      if(M==='l'){ if(g.gp>=8&&ev.gain>0.5&&pgg>mine+2)alt.push({add:g,drop:dStar,gain:ev.gain,label:labelOf(g,dStar),k:pgg}); }
+      else if(ev.gain>mine+2)alt.push({add:g,drop:dStar,gain:ev.gain,label:labelOf(g,dStar),k:ev.gain});
+    }
+    alt.sort((a,b)=>b.k-a.k); alt=alt.slice(0,3);
+  }
+  const kk=M==='c'?'rc':M==='n'?'rn':'b';
+  const altHtml=!dStar||out?'':alt.length?`<div class="glass card"><h3>¿Hay alguien mejor?</h3><div class="note" style="margin:6px 0 4px">Soltando también a ${esc(dStar.n)}, estos agentes libres te sirven más ${M==='l'?'a largo plazo':'para '+per} que ${esc(f.n)}:</div>${alt.map(o=>swapRow(o,kk)).join('')}</div>`
+    :`<div class="glass card"><h3>¿Hay alguien mejor?</h3><div class="note" style="margin-top:6px">Con esa misma baja (${esc(dStar.n)}), ninguno de los agentes libres que sigo te sirve más ${M==='l'?'a largo plazo':'para '+per} que ${esc(f.n)}.</div></div>`;
+  const chips=[['c','Esta semana'],['n','Siguiente'],['l','Largo plazo']].map(([k,l])=>`<button class="chip ${st.rh===k?'on':''}" data-rh="${k}">${l}</button>`).join('');
+  const hint={c:'Jugada táctica: lo traes por los partidos que le quedan a la semana. Importa cuántos juega, no tanto qué tan bueno es.',n:`Para la semana ${S.mu+1} (${rng(NS(),NE())}). Cuenta sus partidos de esa semana contra los del jugador que sueltas.`,l:'Para quedártelo: pesa su nivel por partido, su muestra y su tendencia, no el calendario de una semana.'}[M];
+  const sg1=x=>(x>=0?'+':'−')+f1(Math.abs(x));
+  const list=[...rows].sort((a,b)=>((a.guard||a.ir)-(b.guard||b.ir))||mv(b)-mv(a)).map(r=>{
+    const ok=okRow(r)&&!r.guard;
+    const pillx=!okRow(r)?'<span class="pill">No conviene</span>':M==='l'?(r.pg>=3&&f.gp>=8?'<span class="pill good">Para mucho tiempo</span>':'<span class="pill amber">Mejora poco</span>'):`<span class="pill good">Sirve ${per}</span>`;
+    const info=M==='l'?`${f1(r.de)} vs ${f1(fe)} pts/juego · 2 semanas ${sgn(r.gain)}`:`${f1(r.de)} vs ${f1(fe)} pts/juego · juega ${M==='c'?r.lc:r.ln} vs ${M==='c'?flC:flN}`;
+    const val=M==='l'?sg1(r.pg):sgn(mv(r)), unit=M==='l'?'por juego':'pts';
+    return `<div class="item tap ${ok?'':'dim'}" data-sw="${esc(f.n)}|${esc(r.d.n)}|${kk}">${av(r.d,'sm')}<div class="grow"><div class="nm">Soltar a ${esc(r.d.n)} ${badge(r.d.inj)} ${r.ir?'<span class="pill">IR: no te cuesta puntos ahora</span>':''} ${best&&r===best?'<span class="pill good">Mejor opción</span>':''} ${r.guard&&!r.ir?'<span class="pill amber">De tus mejores</span>':''}</div>
+      <div class="meta">${info} · ${pillx}</div></div>
+      <div style="text-align:right"><div class="val">${val}</div><div class="note">${unit}</div></div><div class="chev">›</div></div>`}).join('');
+  const why=[];
   why.push(`Rinde ${f1(fe)} pts fantasy por partido (promedio ponderado de temporada, últimos 30, 15 y 7, y proyección de ESPN)${f.inj==='DTD'?`, ya descontando ${Math.round((1-st.dtd)*100)}% por riesgo de no jugar`:''}.`);
-  why.push(`Juega ${gC} ${gC===1?'partido':'partidos'} lo que resta de esta semana y ${gN} la siguiente.`);
-  if(tr!=null&&tr>=3)why.push(`Viene subiendo: ${f1(f.l15)} en sus últimos 15 contra ${f1(f.s)} de temporada.`);
-  if(tr!=null&&tr<=-3)why.push(`Viene bajando: ${f1(f.l15)} en sus últimos 15 contra ${f1(f.s)} de temporada.`);
+  why.push(`Juega ${pl(flC,'partido')} lo que resta de esta semana y ${pl(flN,'partido')} la siguiente.`);
+  if(M!=='l'&&tr!=null&&tr>=3)why.push(`Viene subiendo: ${f1(f.l15)} en sus últimos 15 contra ${f1(f.s)} de temporada.`);
+  if(M!=='l'&&tr!=null&&tr<=-3)why.push(`Viene bajando: ${f1(f.l15)} en sus últimos 15 contra ${f1(f.s)} de temporada.`);
   if(f.mn!=null)why.push(f.mn>=28?`Juega ${f0(f.mn)} minutos por partido: rol sólido.`:f.mn<20?`Solo ${f0(f.mn)} minutos por partido: es más riesgoso de lo que parece.`:`Juega ${f0(f.mn)} minutos por partido.`);
-  if(f.gp<8)why.push(`Solo lleva ${f.gp} partidos jugados: la muestra es chica y el promedio puede engañar.`);
+  if(M!=='l'&&f.gp<8)why.push(`Solo lleva ${f.gp} partidos jugados: la muestra es chica.`);
   if(f.own!=null)why.push(f.own<45?`Lo tiene solo el ${f.own}% de las ligas de ESPN: es de los poco vistos.`:`Lo tiene el ${f.own}% de las ligas de ESPN.`);
-  if(f.ws==='W')why.push(`Está en waivers: solo cuenta desde la próxima semana y puede que no llegue a ti.`);
-  why.push('Cada cambio gasta 1 de tus movimientos de la semana.');
-  const chips=[['b','Las dos'],['c','Esta semana'],['n','Siguiente']].map(([k,l])=>`<button class="chip sm ${st.rh===k?'on':''}" data-rh="${k}">${l}</button>`).join('');
-  const list=[...rows].sort((a,b)=>((a.guard||a.ir)-(b.guard||b.ir))||gv(b)-gv(a)).map(r=>{
-    const g=gv(r), ok=g>0.5&&!r.guard, lab=labelOf(f,r.d);
-    const pill=g<=0.5?'<span class="pill">No conviene</span>':`<span class="pill ${lab==='Para mucho tiempo'?'good':'amber'}">${lab}</span>`;
-    return `<div class="item tap ${ok?'':'dim'}" data-sw="${esc(f.n)}|${esc(r.d.n)}|b">${av(r.d,'sm')}<div class="grow"><div class="nm">Soltar a ${esc(r.d.n)} ${badge(r.d.inj)} ${r.ir?'<span class="pill">IR: no te cuesta puntos ahora</span>':''} ${best&&r===best?'<span class="pill good">Mejor opción</span>':''} ${r.guard&&!r.ir?'<span class="pill amber">De tus mejores</span>':''}</div>
-      <div class="meta">${f1(r.de)} vs ${f1(fe)} pts/juego · esta sem. ${sgn(r.gC)} · siguiente ${sgn(r.gN)} · ${pill}</div></div>
-      <div style="text-align:right"><div class="val">${sgn(g)}</div><div class="note">pts</div></div><div class="chev">›</div></div>`}).join('');
-  const altHtml=!dStar||avail(f)===0?'':alt.length?`<div class="glass card"><h3>¿Hay alguien mejor?</h3><div class="note" style="margin:6px 0 4px">Soltando también a ${esc(dStar.n)}, estos agentes libres suman más que ${esc(f.n)}:</div>${alt.map(o=>swapRow(o,'b')).join('')}</div>`
-    :`<div class="glass card"><h3>¿Hay alguien mejor?</h3><div class="note" style="margin-top:6px">Con esa misma baja (${esc(dStar.n)}), ninguno de los agentes libres que sigo suma más que ${esc(f.n)}.</div></div>`;
+  if(f.ws==='W')why.push('Está en waivers: solo cuenta desde la próxima semana y puede que no llegue a ti.');
   return `<div class="glass card"><div class="row" style="gap:10px">${av(f)}<div class="grow"><div class="nm" style="font-size:18px">${esc(f.n)} ${badge(f.inj)} ${f.ws==='W'?'<span class="pill">Waivers</span>':'<span class="pill good">Libre</span>'}</div><div class="meta">${f.t} · ${esc(f.pos)}</div></div></div>
-    <div class="hero" style="margin-top:14px"><div class="stat"><div class="lab">Esperado</div><div class="big">${f0(fe)}</div><div class="note">pts fantasy por juego</div></div><div class="stat"><div class="lab">Juegos</div><div class="big">${gC}<span class="mut" style="font-size:22px"> + ${gN}</span></div><div class="note">esta semana + la siguiente</div></div></div></div>
-    <div class="glass card"><h3>¿Te conviene?</h3><div style="margin-top:8px">${verdict}</div>${vpill?`<div style="margin-top:8px">${vpill}</div>`:''}</div>
-    ${avail(f)===0?'':`<div class="glass card"><h3>¿Por quién lo cambias?</h3><div class="note" style="margin:6px 0 8px">Cada fila es soltar a alguien de tu roster para meter a ${esc(f.n)}. Los más opacos no conviene. Toca uno para ver el desglose.</div><div class="chips" style="margin-bottom:6px">${chips}</div>${list}</div>`}
+    <div class="hero" style="margin-top:14px"><div class="stat"><div class="lab">Esperado</div><div class="big">${f0(fe)}</div><div class="note">pts fantasy por juego</div></div><div class="stat"><div class="lab">Juegos</div><div class="big">${flC}<span class="mut" style="font-size:22px"> + ${flN}</span></div><div class="note">resto de la semana + la siguiente</div></div></div></div>
+    <div class="glass card"><h3>¿Para cuándo lo quieres?</h3><div class="chips" style="margin-top:10px">${chips}</div><div class="note" style="margin-top:8px">${hint}</div></div>
+    <div class="glass card"><h3>¿Te conviene ${per==='largo plazo'?'a largo plazo':'para '+per}?</h3><div style="margin-top:8px">${text}</div>${pill?`<div style="margin-top:8px">${pill}</div>`:''}${reasons.length?`<ul class="why">${reasons.map(x=>`<li>${x}</li>`).join('')}</ul>`:''}</div>
+    ${out?'':`<div class="glass card"><h3>¿Por quién lo cambias?</h3><div class="note" style="margin:6px 0 6px">Soltar a cada uno de tu roster para meter a ${esc(f.n)}, medido ${M==='l'?'a largo plazo (puntos por juego)':'para '+per}. Los opacos no conviene. Toca uno para el desglose.</div>${list}</div>`}
     ${altHtml}
-    <div class="glass card"><h3>Por qué</h3><ul class="why">${why.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    <div class="glass card"><h3>Sobre el jugador</h3><ul class="why">${why.map(x=>`<li>${x}</li>`).join('')}</ul></div>
     <div class="row" style="gap:8px;flex-wrap:wrap"><button class="chip" data-pl="${esc(f.n)}">Ver ficha completa</button></div>`;
 }
 function minasView(){
