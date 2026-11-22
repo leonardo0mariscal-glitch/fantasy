@@ -71,6 +71,27 @@ def pdata(player):
         l15=avg(player, f"02{SEASON}"), l30=avg(player, f"03{SEASON}"),
         pr=avg(player, f"10{SEASON}"), mn=mn, id=player["id"])
 
+def entry_pts(en, per):
+    """puntos fantasy de un jugador en un periodo de puntuacion (None si ESPN no lo trae)"""
+    pe = en.get("playerPoolEntry") or {}
+    v = pe.get("appliedStatTotal")
+    if v is None:
+        for st_ in (pe.get("player") or {}).get("stats", []):
+            if st_.get("statSourceId") == 0 and st_.get("statSplitTypeId") == 5 and st_.get("scoringPeriodId") == per:
+                v = st_.get("appliedTotal"); break
+    return None if v is None else round(float(v), 1)
+
+def day_points(roster, per):
+    """-> ({id: puntos}, suma de titulares redondeada) de un rosterForCurrentScoringPeriod"""
+    out, tot = {}, 0.0
+    for en in (roster or {}).get("entries", []):
+        pid = en.get("playerId") or (en.get("playerPoolEntry") or {}).get("id")
+        v = entry_pts(en, per)
+        if pid is None or v is None: continue
+        out[str(pid)] = v
+        if SLOT.get(en.get("lineupSlotId"), "BE") not in ("BE", "IR"): tot += v
+    return out, round(tot)
+
 def exp(p):
     tot = wsum = 0
     for v, w in ((p["s"], .30), (p["l15"], .25), (p["l30"], .15), (p["l7"], .10), (p["pr"], .20)):
@@ -104,7 +125,7 @@ def main():
     nxt = {"start": key(sp_date(n0)), "end": key(sp_date(n1))}
     spd = {str(i): key(sp_date(i)) for i in range(c0, sp + 1)}
     # puntos de la semana
-    pts, by, live = {}, {}, {}
+    pts, by, live, rcs = {}, {}, {}, {}
     for e in d.get("schedule", []):
         if e.get("matchupPeriodId") != mu: continue
         for side in ("home", "away"):
@@ -113,8 +134,42 @@ def main():
             tid = x["teamId"]
             pb = {k: v for k, v in (x.get("pointsByScoringPeriod") or {}).items() if int(k) < sp}
             lv = (x.get("rosterForCurrentScoringPeriod") or {}).get("appliedStatTotal", 0) or 0
+            rcs[tid] = x.get("rosterForCurrentScoringPeriod")
             by[tid] = {k: round(v) for k, v in pb.items()}
             live[tid] = round(lv); pts[tid] = round(sum(pb.values()) + lv)
+    try: state = json.load(open("state.json"))
+    except Exception: state = {}
+    pdc = state.get("pd", {})                      # cache de dias ya cerrados: {periodo: {equipo: {id: pts}}}
+    pdc = {k: v for k, v in pdc.items() if int(k) >= c0}
+    dbg = {"hoy_ok": [], "hoy_mal": {}, "dias_ok": [], "dias_mal": {}}
+    pdt = {tid: {} for tid in live}                # {equipo: {"MM-DD": {id: pts}}}
+    today_k = key(sp_date(sp))
+    for tid, rc in rcs.items():
+        pts_, chk = day_points(rc, sp)
+        if pts_ and abs(chk - live.get(tid, 0)) <= 2: pdt[tid][today_k] = pts_; dbg["hoy_ok"].append(tid)
+        else: dbg["hoy_mal"][str(tid)] = [len(pts_), chk, live.get(tid)]
+    for per in range(c0, sp):
+        bad = state.setdefault("pdbad", {})
+        if str(per) not in pdc and time.time() - bad.get(str(per), 0) > 1800:   # si falla, reintenta cada 30 min
+            try:
+                dd = http(BASE + f"?view=mMatchup&scoringPeriodId={per}", ck); got = {}
+                for e in dd.get("schedule", []):
+                    if e.get("matchupPeriodId") != mu: continue
+                    for side in ("home", "away"):
+                        x = e.get(side)
+                        if not x: continue
+                        tid = x["teamId"]; pts_, chk = day_points(x.get("rosterForCurrentScoringPeriod"), per)
+                        want = by.get(tid, {}).get(str(per))
+                        if pts_ and want is not None and abs(chk - want) <= 2: got[str(tid)] = pts_
+                        else: dbg["dias_mal"][f"{per}/{tid}"] = [len(pts_), chk, want]
+                if got: pdc[str(per)] = got
+                else: bad[str(per)] = int(time.time())
+            except Exception as ex:
+                dbg["dias_mal"][str(per)] = type(ex).__name__
+        for tid_s, v in (pdc.get(str(per)) or {}).items():
+            if int(tid_s) in pdt: pdt[int(tid_s)][key(sp_date(per))] = v
+        if str(per) in pdc: dbg["dias_ok"].append(per)
+    state["pd"] = pdc
     teams = []
     for t in d["teams"]:
         tid = t["id"]; rec = (t.get("record") or {}).get("overall", {})
@@ -125,7 +180,7 @@ def main():
             r.append([p["n"], p["t"], SLOT.get(en["lineupSlotId"], "BE"), p["inj"], p["pos"], p["s"], p["gp"], p["l7"], p["l15"], p["l30"], p["pr"], p["mn"], p["id"]])
         teams.append({"id": tid, "name": t.get("name") or (t.get("location", "") + " " + t.get("nickname", "")).strip(),
             "owner": OWNERS.get(tid, ""), "rec": f"{rec.get('wins', 0)}-{rec.get('losses', 0)}", "acq": int(acq),
-            "pts": pts.get(tid, 0), "live": live.get(tid, 0), "by": by.get(tid, {}), "r": r})
+            "pts": pts.get(tid, 0), "live": live.get(tid, 0), "by": by.get(tid, {}), "pd": pdt.get(tid, {}), "r": r})
     # agentes libres
     flt = {"players": {"filterStatus": {"value": ["FREEAGENT", "WAIVERS"]}, "filterSlotIds": {"value": [0,1,2,3,4,5,6,11]},
            "limit": 300, "sortPercOwned": {"sortPriority": 1, "sortAsc": False},
@@ -140,22 +195,34 @@ def main():
         fas.append((max(v for v in (p["l15"], p["l30"], p["s"]) if v is not None) if any(v is not None for v in (p["l15"], p["l30"], p["s"])) else 0,
                     [p["n"], p["t"], p["inj"], p["pos"], p["s"], p["gp"], p["l7"], p["l15"], p["l30"], p["pr"], p["mn"], ws, own, p["id"]], p))
     fas.sort(key=lambda x: -x[0]); fas = fas[:45]
-    # calendario NBA (hora del este)
-    sched = {}
+    # calendario NBA (hora del este) + estado de los partidos del dia actual
+    sched, gs = {}, {}
+    sbc = {}
+    def get_sb(day_):
+        if day_ not in sbc: sbc[day_] = http("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=" + day_.strftime("%Y%m%d"))
+        return sbc[day_]
+    def teams_of(ev):
+        cs = ev["competitions"][0]["competitors"]
+        return {c["homeAway"]: ALIAS.get(c["team"]["abbreviation"], c["team"]["abbreviation"]) for c in cs}
     day = now.date()
     while day <= sp_date(n1):
         try:
-            sb = http("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=" + day.strftime("%Y%m%d"))
             lst = []
-            for ev in sb.get("events", []):
-                cs = ev["competitions"][0]["competitors"]
-                ab = {c["homeAway"]: ALIAS.get(c["team"]["abbreviation"], c["team"]["abbreviation"]) for c in cs}
+            for ev in get_sb(day).get("events", []):
+                ab = teams_of(ev)
                 t = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(ET)
                 lst.append(f"{ab['away']}@{ab['home']} {t:%H:%M}")
             sched[key(day)] = sorted(lst, key=lambda s: s.split()[1])
         except Exception as e:
             print("calendario fallo", day, type(e).__name__)
         day += timedelta(days=1)
+    try:
+        for ev in get_sb(sp_date(sp)).get("events", []):
+            ab = teams_of(ev); stt = ev.get("status") or ev["competitions"][0].get("status") or {}
+            row = [(stt.get("type") or {}).get("state", "pre"), stt.get("period", 0), stt.get("displayClock", "")]
+            gs[ab["away"]] = row; gs[ab["home"]] = row
+    except Exception as e:
+        print("estado de partidos fallo", type(e).__name__)
     # minas de oro: agente libre + a quien soltar, respetando los espacios por posicion
     mine = next(t for t in teams if t["id"] == ME)
     today = key(now.date()); nowt = now.strftime("%H:%M")
@@ -222,11 +289,10 @@ def main():
     gold.sort(key=lambda x: -x["gain"]); gold = gold[:6]
     out = {"u": now.isoformat(timespec="minutes"), "sp": sp, "mu": mu,
            "muD": f"{sp_date(c0).day}-{sp_date(c1).day} {MESES[sp_date(c1).month - 1]}", "me": ME,
-           "cur": cur, "nxt": nxt, "spd": spd, "teams": teams, "fa": [x[1] for x in fas], "sched": sched, "gold": gold}
+           "cur": cur, "nxt": nxt, "spd": spd, "teams": teams, "fa": [x[1] for x in fas], "sched": sched, "gold": gold,
+           "gs": gs, "gsd": today_k, "dbg": dbg}
     with open("data.json", "w", encoding="utf-8") as f: json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
     # avisos de minas de oro (solo las nuevas)
-    try: state = json.load(open("state.json"))
-    except Exception: state = {}
     seen = state.get("gold", {}); nowts = int(time.time())
     seen = {k: v for k, v in seen.items() if nowts - v < 36 * 3600}
     new = [g for g in gold if g["n"] not in seen]
@@ -234,7 +300,8 @@ def main():
         ntfy("Mina de oro: " + g["n"],
              f"Agrega a {g['n']} ({g['t']}): {g['e']} pts fantasy por juego.\nSuelta a {g['drop']} ({g['dropE']}).\n+{g['gain']} pts esperados en 2 semanas ({g['gw']:+d} esta semana).\n{g['label']}." + (" Hazlo despues del domingo." if g['gw'] < -2 else ""), "high")
         seen[g["n"]] = nowts
-    json.dump({"gold": seen}, open("state.json", "w"))
+    state["gold"] = seen
+    json.dump(state, open("state.json", "w"), separators=(",", ":"))
     print(f"ok: {len(teams)} equipos, {len(fas)} agentes libres, {len(gold)} minas de oro, {len(new)} avisos nuevos")
 
 if __name__ == "__main__":

@@ -101,6 +101,12 @@ table.wk .lk{text-decoration:line-through;color:var(--mut)}
 .shbar{display:flex;align-items:center;gap:12px}
 ul.why{margin:8px 0 0;padding-left:18px;font-size:14px}ul.why li{margin:0 0 7px}
 .chip.auto{border-style:dashed}
+.chip.sm{font-size:12px;padding:5px 11px}
+.val .sub{font:600 11px var(--body);color:var(--mut);letter-spacing:0}
+.hero.three{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.hero.three .stat .big{font-size:clamp(28px,9.2vw,42px)}
+.hero.three .stat .lab{font-size:10.5px;letter-spacing:.03em}
+.hero.three .stat .note{font-size:11px}
 </style>
 </head>
 <body>
@@ -113,7 +119,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:''};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live'};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -135,6 +141,46 @@ function game(team,day){
     if(a===team) return {opp:'@'+h,time:tm};
     if(h===team) return {opp:'vs '+a,time:tm};
   } return null;
+}
+/* ---------- puntos en vivo ---------- */
+const liveDay=()=>(S.spd&&S.sp!=null&&S.spd[String(S.sp)])||todayKey();
+const gstate=t=>{const g=S.gs&&S.gs[t];return g?{s:g[0],p:Number(g[1])||0,c:String(g[2]||'')}:null};
+const dayPts=(tm,day,id)=>{const d=tm&&tm.pd&&tm.pd[day];const v=d?d[String(id)]:null;return v==null?null:v};
+const fp=x=>Number.isInteger(x)?String(x):x.toFixed(1);
+function frac(g){ /* fracción del partido que falta, según periodo y reloj */
+  const c=g.c; let mins=0;
+  if(c.includes(':')){const [m,s2]=c.split(':');mins=(+m||0)+(+s2||0)/60}else mins=(parseFloat(c)||0)/60;
+  const rem=g.p<=4?(4-g.p)*12+mins:mins; return Math.max(0,Math.min(1,rem/48));
+}
+function fracFb(gm){ /* sin reloj: se estima por la hora de salto */
+  const [h,m]=gm.time.split(':').map(Number),n=etNow(); const el=(+n.hour*60+ +n.minute)-(h*60+m);
+  return Math.max(0,Math.min(1,1-Math.max(0,el)/140));
+}
+function liveProj(p,act,f){ /* final esperado = lo que lleva + lo que le falta (mezcla su ritmo de hoy con su promedio) */
+  const base=act>0?p.e:p.e*avail(p);
+  if(f>=1) return act+base;
+  const pace=f<0.97?act/(1-f):null, w=(1-f)*0.6;
+  return act+f*(pace==null?base:w*pace+(1-w)*base);
+}
+function gameState(p,day,g){
+  const ld=liveDay(); if(!g) return {s:'none'};
+  if(day<ld) return {s:'post'};
+  if(day>ld) return {s:'fut'};
+  const gs=gstate(p.t); if(gs) return {s:gs.s,gs,f:frac(gs)};
+  return started(day,g.time)?{s:'in',f:fracFb(g)}:{s:'pre'};
+}
+function expToday(){
+  const me=team(S.me), ld=liveDay();
+  if(!me.pd||!me.pd[ld]) return {na:true};
+  let add=0;
+  for(const p of roster(me)){
+    if(p.slot==='BE'||p.slot==='IR') continue;
+    const g=game(p.t,ld); if(!g) continue;
+    const q=gameState(p,ld,g); if(q.s==='post') continue;
+    const act=dayPts(me,ld,p.id)||0;
+    add+=q.s==='in'?Math.max(0,liveProj(p,act,q.f)-act):p.e*avail(p);
+  }
+  return {add,tot:me.pts+add};
 }
 function exp(p){
   const w=[[p.s,.30],[p.l15,.25],[p.l30,.15],[p.l7,.10],[p.pr,.20]]; let a=0,b=0;
@@ -242,10 +288,12 @@ function header(){
   const me=team(S.me), sorted=[...S.teams].sort((a,b)=>b.pts-a.pts), lead=sorted[0].id===S.me?sorted[1]:sorted[0];
   const gap=me.pts-lead.pts; const rank=sorted.findIndex(t=>t.id===S.me)+1;
   const old=(Date.now()-Date.parse(S.u))>2*3600*1000;
+  const x=(st.tab==='roster'&&st.view==='day'&&st.rmode==='exp')?expToday():null;
+  const exs=x?`<div class="stat"><div class="lab">Esperados hoy</div><div class="big">${x.na?'–':f0(x.tot)}</div><div class="note">${x.na?'sin datos en vivo':(x.add>0?'+'+f0(x.add)+' por sumar':'el día ya cerró')}</div></div>`:'';
   return `<div class="top"><div><h1>${esc(tn(me))}</h1><div class="sub">Santos y Huga · Semana ${S.mu} (${esc(S.muD)})</div></div>
    <div class="row" style="gap:8px"><button class="btn ghost" id="refresh" aria-label="Actualizar toda la app">${st.refBusy?'…':'↻'}</button></div></div>
-   <div class="glass card"><div class="hero">
-     <div class="stat"><div class="lab">Tus puntos</div><div class="big">${me.pts}</div><div class="note">${rank}.º de 6 esta semana</div></div>
+   <div class="glass card"><div class="hero ${x?'three':''}">
+     <div class="stat"><div class="lab">Tus puntos</div><div class="big">${me.pts}</div><div class="note">${rank}.º de 6 esta semana</div></div>${exs}
      <div class="stat"><div class="lab">${sorted[0].id===S.me?'Segundo lugar':'Líder'}</div><div class="big">${lead.pts}</div><div class="note">${esc(tn(lead))}</div></div>
      <div class="gap"><span class="mut">${gap>=0?'Ventaja':'Diferencia'}</span><span class="big" style="font-size:28px;color:${gap>=0?'var(--good)':'var(--amber)'}">${gap>=0?'+':'−'}${Math.abs(gap)}</span></div>
    </div>
@@ -264,15 +312,28 @@ function dayView(){
     let tag='';
     if(g&&!lock&&isStart&&!optSet.has(p.n)&&ups.length) tag='<span class="pill amber">Mejor en banca</span>';
     if(g&&!lock&&!isStart&&optSet.has(p.n)) tag='<span class="pill good">Mejor titular</span>';
-    const v=g?p.e*avail(p):null;
+    const q=gameState(p,day,g), act=dayPts(me,day,p.id), none='<span class="mut">–</span>';
+    let vh;
+    if(q.s==='none') vh=none;
+    else if(st.rmode==='live') vh=(act!=null&&(q.s==='in'||q.s==='post'))?fp(act):none;
+    else if(q.s==='post') vh=act!=null?fp(act):none;
+    else if(q.s==='in'&&act!=null) vh='≈'+f0(liveProj(p,act,q.f))+`<div class="sub">lleva ${fp(act)}</div>`;
+    else vh='≈'+f0(p.e*avail(p));
+    let est=lock?' · ya empezó':'';
+    if(q.gs&&q.s==='in') est=' · '+(q.gs.p>4?'OT':'Q'+q.gs.p)+' '+esc(q.gs.c);
+    else if(q.gs&&q.s==='post') est=' · final';
+    else if(q.gs&&q.s==='pre') est='';
     return `<div class="item tap" data-pl="${esc(p.n)}"><div class="slot ${p.slot}">${p.slot}</div>${av(p)}<div class="grow"><div class="nm">${esc(p.n)} ${badge(p.inj)}</div>
-      <div class="meta">${p.t} · ${p.pos} · ${g?esc(g.opp)+' '+tm12(g.time)+(lock?' · ya empezó':''):'sin partido'} ${tag}</div></div>
-      <div class="val">${v==null?'<span class="mut">–</span>':'≈'+f0(v)}</div></div>`}).join('');
+      <div class="meta">${p.t} · ${p.pos} · ${g?esc(g.opp)+' '+tm12(g.time)+est:'sin partido'} ${tag}</div></div>
+      <div class="val">${vh}</div></div>`}).join('');
   const sw=ups.length?`<div class="note" style="margin-top:8px"><b>Sube:</b> ${ups.map(esc).join(', ')} · <b>baja:</b> ${downs.map(esc).join(', ')||'–'}. Esperado ${f0(opt.tot)} vs ${f0(curTot)} con tu alineación actual.</div>`:`<div class="note" style="margin-top:8px">Tu alineación actual ya es la mejor que veo para este día: esperado ${f0(curTot)} pts con ${curN} titulares jugando.</div>`;
   return `<div class="glass card"><div class="dayhead"><button class="arrow" id="prev" aria-label="Día anterior" ${st.di===0?'disabled':''}>‹</button>
     <div style="text-align:center"><h2>${dl(day)}</h2><div class="note">${(S.sched[day]||[]).length} partidos NBA${day===todayKey()?' · hoy':''}</div></div>
     <button class="arrow" id="next" aria-label="Día siguiente" ${st.di===D.length-1?'disabled':''}>›</button></div>${sw}</div>
-    <div class="glass card"><h3>Roster</h3><div style="margin-top:6px">${rows}</div>
+    <div class="glass card"><h3>Roster</h3>
+    <div class="chips" style="margin-top:8px"><button class="chip sm ${st.rmode==='live'?'on':''}" data-rm="live">Live</button><button class="chip sm ${st.rmode==='exp'?'on':''}" data-rm="exp">Puntos esperados</button></div>
+    <div class="note" style="margin-top:6px">${st.rmode==='live'?(team(S.me).pd?'Puntos reales de ESPN de este día. Un guión es que aún no juega (o no tiene partido).':'Aún no llegan los puntos en vivo: el robot los empieza a leer en su próxima vuelta.'):'Lo que se espera que termine cada uno. En partidos en curso se corrige con lo que ya lleva.'}</div>
+    <div style="margin-top:6px">${rows}</div>
 </div>`;
 }
 
@@ -522,6 +583,7 @@ if(typeof document!=='undefined'){
     else if(t.id==='refresh')load(true);
     else if(t.id==='prev'&&st.di>0){st.di--;render();}
     else if(t.id==='next'&&st.di<days().length-1){st.di++;render();}
+    else if(t.dataset.rm){st.rmode=t.dataset.rm;render();}
     else if(t.dataset.view){st.view=t.dataset.view;render();}
     else if(t.dataset.wk){st.wk=t.dataset.wk;render();}
     else if(t.dataset.pos){st.pos=t.dataset.pos;render();}

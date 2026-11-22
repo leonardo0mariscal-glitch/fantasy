@@ -30,6 +30,8 @@ jobs:
           end=$(( $(date +%s) + 19800 ))
           echo "CONTINUE=1" >> "$GITHUB_ENV"
           while [ "$(date +%s)" -lt "$end" ]; do
+            # toma la ultima version del lector en cada vuelta (asi los cambios no requieren reiniciar)
+            git fetch -q --depth=1 origin main && git checkout -q FETCH_HEAD -- fetch_espn.py || echo "sin actualizar el lector"
             python fetch_espn.py && rc=0 || rc=$?
             if [ "$rc" -eq 3 ]; then echo "Cookies caducadas: no se relanza"; echo "CONTINUE=0" >> "$GITHUB_ENV"; exit 0; fi
             if [ "$rc" -eq 0 ]; then
