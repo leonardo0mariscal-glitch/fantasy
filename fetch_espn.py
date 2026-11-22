@@ -97,8 +97,8 @@ def main():
     mps = d["settings"]["scheduleSettings"].get("matchupPeriods", {})
     def span(m):
         l = mps.get(str(m))
-        if l: return min(l), max(l)
-        a = sp + 7 * (m - mu); return a, a + 6
+        if l and len(l) >= 5: return min(l), max(l)      # lista real de periodos de puntuacion
+        a = 28 + 7 * (m - 5); return a, a + 6           # semana 5 empezo en el periodo 28 (lunes 16 nov); semanas de 7 dias
     c0, c1 = span(mu); n0, n1 = span(mu + 1)
     cur = {"start": key(sp_date(c0)), "end": key(sp_date(c1))}
     nxt = {"start": key(sp_date(n0)), "end": key(sp_date(n1))}
