@@ -102,6 +102,9 @@ table.wk .lk{text-decoration:line-through;color:var(--mut)}
 ul.why{margin:8px 0 0;padding-left:18px;font-size:14px}ul.why li{margin:0 0 7px}
 .chip.auto{border-style:dashed}
 .chip.sm{font-size:12px;padding:5px 11px}
+.sbox{width:100%;box-sizing:border-box;font:500 16px var(--body);padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.82);color:var(--text);outline:none;-webkit-appearance:none;appearance:none}
+.sbox:focus{border-color:#0c0c0e;box-shadow:0 0 0 3px rgba(12,12,14,.1)}
+.dim{opacity:.55}
 .val .sub{font:600 11px var(--body);color:var(--mut);letter-spacing:0}
 .hero.three{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .hero.three .stat .big{font-size:clamp(28px,9.2vw,42px)}
@@ -119,7 +122,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live'};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'b'};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -271,6 +274,7 @@ function goldList(){
 function findAny(name){
   for(const t of S.teams){for(const a of t.r){if(a[0]===name){const p=mkP(a);p.owner=t.id;return p}}}
   for(const a of S.fa){if(a[0]===name){const p=mkF(a);p.owner=0;return p}}
+  for(const a of (S.fs||[])){if(a[0]===name){const p=mkF(a);p.owner=0;return p}}
   return null;
 }
 function rankIn(R,p){return R.filter(x=>x.slot!=='IR').sort((a,b)=>b.e-a.e).findIndex(x=>x.n===p.n)+1}
@@ -452,6 +456,107 @@ function goldView(){
   const rows=G.length?G.map(o=>swapRow(o,'b')).join(''):'<div class="mut">Ahorita no veo ningún agente libre que valga la pena.</div>';
   return `<div class="glass card"><h3>Minas de oro</h3><div class="note" style="margin:6px 0 10px">Puntos de fantasy de tu liga. Cada cambio respeta tus espacios por posición y nunca toca a tus 7 mejores. Toca uno para ver el desglose.</div>${rows}</div>`;
 }
+/* ---------- Mi radar: buscar a un jugador que viste ---------- */
+const norm=x=>String(x).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[.'’\-]/g,' ').replace(/\s+/g,' ').trim();
+let _pool=null,_poolS=null;
+function radarPool(){
+  if(_pool&&_poolS===S)return _pool;
+  const out=[],seen=new Set(), add=(p,o)=>{if(seen.has(p.n))return;seen.add(p.n);p.owner=o;p.nn=norm(p.n);out.push(p)};
+  for(const t of S.teams)for(const a of t.r)add(mkP(a),t.id);
+  for(const a of S.fa)add(mkF(a),0);
+  for(const a of (S.fs||[]))add(mkF(a),0);
+  _pool=out;_poolS=S;return out;
+}
+function radarFind(q){
+  const nq=norm(q); if(!nq)return [];
+  const toks=nq.split(' '), res=[];
+  for(const p of radarPool()){
+    const words=p.nn.split(' '); let sc=0,ok=true;
+    for(const tk of toks){ if(words.some(w=>w.startsWith(tk)))sc+=2; else if(p.nn.includes(tk))sc+=1; else{ok=false;break} }
+    if(!ok)continue;
+    if(p.nn.startsWith(nq))sc+=3;
+    res.push({p,sc});
+  }
+  res.sort((a,b)=>b.sc-a.sc||((b.p.owner===0)-(a.p.owner===0))||b.p.e-a.p.e);
+  return res.slice(0,15).map(x=>x.p);
+}
+function radarResults(){
+  const q=st.q.trim(); if(!q)return '';
+  const L=radarFind(q);
+  if(!L.length)return `<div class="glass card"><div class="mut">No encontré a nadie con “${esc(q)}”. Prueba con el apellido o con menos letras. Un novato sin partidos jugados todavía no aparece.</div></div>`;
+  return `<div class="glass card">`+L.map(p=>{
+    const own=p.owner===0?(p.ws==='W'?'<span class="pill">Waivers</span>':'<span class="pill good">Libre</span>'):p.owner===S.me?'<span class="pill">En tu equipo</span>':`<span class="pill amber">Lo tiene ${esc(tn(team(p.owner)))}</span>`;
+    const attr=p.owner===0?`data-rd="${esc(p.n)}"`:`data-pl="${esc(p.n)}"`;
+    return `<div class="item tap" ${attr}>${av(p,'sm')}<div class="grow"><div class="nm">${esc(p.n)} ${badge(p.inj)}</div>
+      <div class="meta">${p.t} · ${p.pos} · ${p.gp} PJ · ${p.mn!=null?f0(p.mn)+' min':'– min'} ${own}</div></div>
+      <div style="text-align:right"><div class="val">${f0(p.e*avail(p))}</div><div class="note">pts/juego</div></div><div class="chev">›</div></div>`}).join('')+`</div>`;
+}
+function radarView(){
+  return `<div class="glass card"><h3>Mi radar</h3><div class="note" style="margin:6px 0 10px">¿Viste a alguien que te gustó? Escribe su nombre o apellido, elígelo y te digo si te conviene, por quién cambiarlo y si es para esta semana o para largo plazo.</div>
+    <input class="sbox" id="rq" type="search" inputmode="search" placeholder="Buscar jugador…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Buscar jugador" value="${esc(st.q)}"></div>
+    <div id="rres">${radarResults()}</div>`;
+}
+const sgn=x=>(x>=0?'+':'−')+f0(Math.abs(x));
+function radarSheet(name){
+  const f0p=findAny(name); if(!f0p)return '<div class="mut">No encontré a este jugador.</div>';
+  const f={...f0p,slot:'BE'};
+  const R0=roster(team(S.me)), AP=autoProt(R0), hdB=hdOf('b'), hdC=hdays('c'), hdN=hdays('n');
+  const base=hdB.map(d=>bestDay(R0,d,d===todayKey()).tot), fe=f.e*avail(f);
+  const rows=R0.map(d=>{
+    const ev=evalSwap(R0,f,d,hdB,base);
+    const gC=ev.rows.filter(r=>hdC.includes(r.day)).reduce((a,r)=>a+r.diff,0), gN=ev.rows.filter(r=>hdN.includes(r.day)).reduce((a,r)=>a+r.diff,0);
+    return {d,gC,gN,gain:ev.gain,ir:d.slot==='IR',guard:st.prot.has(d.n)||AP.has(d.n),de:d.e*avail(d)};
+  });
+  const gv=r=>st.rh==='c'?r.gC:st.rh==='n'?r.gN:r.gain;
+  const free=rows.filter(r=>!r.guard&&!r.ir).sort((a,b)=>b.gain-a.gain);   // a los de IR no los recomiendo soltar solos: pueden volver
+  const best=free.length&&free[0].gain>0.5?free[0]:null;
+  const topGuard=rows.filter(r=>r.guard&&!r.ir).sort((a,b)=>b.gain-a.gain)[0];
+  let verdict,vpill='';
+  if(f.inj==='O'||f.inj==='IR'||f.inj==='SUS') verdict=`Ahorita no: ${esc(f.n)} está fuera y no suma puntos hasta que regrese. Si lo quieres para cuando vuelva, mejor déjalo en tu radar.`;
+  else if(best){
+    const lab=labelOf(f,best.d); vpill=`<span class="pill ${lab==='Para mucho tiempo'?'good':'amber'}">${lab}</span>`;
+    verdict=`Sí te conviene: soltando a <b>${esc(best.d.n)}</b> sumas ≈${sgn(best.gain)} pts en dos semanas (esta semana ${sgn(best.gC)}, la siguiente ${sgn(best.gN)}). `+(lab==='Para mucho tiempo'?'Rinde claramente más por partido, así que sirve para quedártelo.':'La ganancia viene de que juega más partidos o de una racha; úsalo para esta semana y revisa después.');
+  } else if(topGuard&&topGuard.gain>2) verdict=`Solo saldría bien soltando a ${esc(topGuard.d.n)}, pero es de tus mejores: no te lo recomiendo.`;
+  else verdict=`Ahorita no te conviene: con ninguno de tus jugadores soltables sumas puntos. ${esc(f.n)} rinde ${f1(fe)} pts por partido y a tus más flojos les ganas poco o nada.`;
+  // ¿hay alguien mejor? mismo jugador a soltar, probando a los agentes libres que sigo
+  const dStar=best?best.d:(free[0]&&free[0].d);
+  let alt=[];
+  if(dStar&&avail(f)>0){
+    const cands=S.fa.map(mkF).filter(g=>g.n!==f.n&&avail(g)>0).map(g=>({g,v:g.e*avail(g)*gamesIn(g.t,hdB)})).sort((a,b)=>b.v-a.v).slice(0,18);
+    for(const {g} of cands){const ev=evalSwap(R0,{...g,slot:'BE'},dStar,hdB,base); if(ev.gain>(best?best.gain:0)+2)alt.push({add:g,drop:dStar,gain:ev.gain,label:labelOf(g,dStar)});}
+    alt.sort((a,b)=>b.gain-a.gain); alt=alt.slice(0,3);
+  }
+  const tr=(f.l15!=null&&f.s!=null)?f.l15-f.s:null, gC=gamesIn(f.t,hdC), gN=gamesIn(f.t,hdN), why=[];
+  why.push(`Rinde ${f1(fe)} pts fantasy por partido (promedio ponderado de temporada, últimos 30, 15 y 7, y proyección de ESPN)${f.inj==='DTD'?`, ya descontando ${Math.round((1-st.dtd)*100)}% por riesgo de no jugar`:''}.`);
+  why.push(`Juega ${gC} ${gC===1?'partido':'partidos'} lo que resta de esta semana y ${gN} la siguiente.`);
+  if(tr!=null&&tr>=3)why.push(`Viene subiendo: ${f1(f.l15)} en sus últimos 15 contra ${f1(f.s)} de temporada.`);
+  if(tr!=null&&tr<=-3)why.push(`Viene bajando: ${f1(f.l15)} en sus últimos 15 contra ${f1(f.s)} de temporada.`);
+  if(f.mn!=null)why.push(f.mn>=28?`Juega ${f0(f.mn)} minutos por partido: rol sólido.`:f.mn<20?`Solo ${f0(f.mn)} minutos por partido: es más riesgoso de lo que parece.`:`Juega ${f0(f.mn)} minutos por partido.`);
+  if(f.gp<8)why.push(`Solo lleva ${f.gp} partidos jugados: la muestra es chica y el promedio puede engañar.`);
+  if(f.own!=null)why.push(f.own<45?`Lo tiene solo el ${f.own}% de las ligas de ESPN: es de los poco vistos.`:`Lo tiene el ${f.own}% de las ligas de ESPN.`);
+  if(f.ws==='W')why.push(`Está en waivers: solo cuenta desde la próxima semana y puede que no llegue a ti.`);
+  why.push('Cada cambio gasta 1 de tus movimientos de la semana.');
+  const chips=[['b','Las dos'],['c','Esta semana'],['n','Siguiente']].map(([k,l])=>`<button class="chip sm ${st.rh===k?'on':''}" data-rh="${k}">${l}</button>`).join('');
+  const list=[...rows].sort((a,b)=>((a.guard||a.ir)-(b.guard||b.ir))||gv(b)-gv(a)).map(r=>{
+    const g=gv(r), ok=g>0.5&&!r.guard, lab=labelOf(f,r.d);
+    const pill=g<=0.5?'<span class="pill">No conviene</span>':`<span class="pill ${lab==='Para mucho tiempo'?'good':'amber'}">${lab}</span>`;
+    return `<div class="item tap ${ok?'':'dim'}" data-sw="${esc(f.n)}|${esc(r.d.n)}|b">${av(r.d,'sm')}<div class="grow"><div class="nm">Soltar a ${esc(r.d.n)} ${badge(r.d.inj)} ${r.ir?'<span class="pill">IR: no te cuesta puntos ahora</span>':''} ${best&&r===best?'<span class="pill good">Mejor opción</span>':''} ${r.guard&&!r.ir?'<span class="pill amber">De tus mejores</span>':''}</div>
+      <div class="meta">${f1(r.de)} vs ${f1(fe)} pts/juego · esta sem. ${sgn(r.gC)} · siguiente ${sgn(r.gN)} · ${pill}</div></div>
+      <div style="text-align:right"><div class="val">${sgn(g)}</div><div class="note">pts</div></div><div class="chev">›</div></div>`}).join('');
+  const altHtml=!dStar||avail(f)===0?'':alt.length?`<div class="glass card"><h3>¿Hay alguien mejor?</h3><div class="note" style="margin:6px 0 4px">Soltando también a ${esc(dStar.n)}, estos agentes libres suman más que ${esc(f.n)}:</div>${alt.map(o=>swapRow(o,'b')).join('')}</div>`
+    :`<div class="glass card"><h3>¿Hay alguien mejor?</h3><div class="note" style="margin-top:6px">Con esa misma baja (${esc(dStar.n)}), ninguno de los agentes libres que sigo suma más que ${esc(f.n)}.</div></div>`;
+  return `<div class="glass card"><div class="row" style="gap:10px">${av(f)}<div class="grow"><div class="nm" style="font-size:18px">${esc(f.n)} ${badge(f.inj)} ${f.ws==='W'?'<span class="pill">Waivers</span>':'<span class="pill good">Libre</span>'}</div><div class="meta">${f.t} · ${esc(f.pos)}</div></div></div>
+    <div class="hero" style="margin-top:14px"><div class="stat"><div class="lab">Esperado</div><div class="big">${f0(fe)}</div><div class="note">pts fantasy por juego</div></div><div class="stat"><div class="lab">Juegos</div><div class="big">${gC}<span class="mut" style="font-size:22px"> + ${gN}</span></div><div class="note">esta semana + la siguiente</div></div></div></div>
+    <div class="glass card"><h3>¿Te conviene?</h3><div style="margin-top:8px">${verdict}</div>${vpill?`<div style="margin-top:8px">${vpill}</div>`:''}</div>
+    ${avail(f)===0?'':`<div class="glass card"><h3>¿Por quién lo cambias?</h3><div class="note" style="margin:6px 0 8px">Cada fila es soltar a alguien de tu roster para meter a ${esc(f.n)}. Los más opacos no conviene. Toca uno para ver el desglose.</div><div class="chips" style="margin-bottom:6px">${chips}</div>${list}</div>`}
+    ${altHtml}
+    <div class="glass card"><h3>Por qué</h3><ul class="why">${why.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="chip" data-pl="${esc(f.n)}">Ver ficha completa</button></div>`;
+}
+function minasView(){
+  const tabs=`<div class="chips" style="margin-bottom:12px"><button class="chip ${st.mt==='gold'?'on':''}" data-mt="gold">Minas de oro</button><button class="chip ${st.mt==='radar'?'on':''}" data-mt="radar">Mi radar</button></div>`;
+  return tabs+(st.mt==='radar'?radarView():goldView());
+}
 const TABS=[['roster','Roster'],['liga','Liga'],['agents','Agentes'],['plan','Plan'],['gold','Minas']];
 /* ---------- hojas de detalle ---------- */
 const barRow=(l,v,max)=>`<div class="row" style="padding:4px 0"><div style="width:86px" class="note">${l}</div><div class="grow"><div class="bar"><i style="width:${v==null?0:Math.max(3,Math.min(100,v/max*100))}%"></i></div></div><div class="num" style="width:44px;text-align:right"><b>${f1(v)}</b></div></div>`;
@@ -523,7 +628,7 @@ function renderSheet(){
   const el=document.getElementById('sheet'); if(!el)return;
   const s=st.sheet;
   if(!s){el.innerHTML='';el.className='';document.body.style.overflow='';return}
-  const body=s.t==='sw'?swapSheet(s.a,s.d,s.k):playerSheet(s.n);
+  const body=s.t==='sw'?swapSheet(s.a,s.d,s.k):s.t==='rd'?radarSheet(s.n):playerSheet(s.n);
   const keep=el.firstElementChild?el.scrollTop:0;
   el.className='open';
   el.innerHTML=`<div class="wrap"><div class="shbar"><button class="arrow" id="back" aria-label="Atrás">‹</button><div class="note">Desliza hacia la derecha para volver</div></div>${body}</div>`;
@@ -537,8 +642,10 @@ function closeSheet(fromPop){
 }
 
 function render(){
-  const body=st.tab==='roster'?rosterView():st.tab==='liga'?ligaView():st.tab==='agents'?agentsView():st.tab==='plan'?planView():goldView();
+  const body=st.tab==='roster'?rosterView():st.tab==='liga'?ligaView():st.tab==='agents'?agentsView():st.tab==='plan'?planView():minasView();
+  const ae=document.activeElement, keepF=ae&&ae.id==='rq', cp=keepF?ae.selectionStart:0;
   $('#app').innerHTML=header()+body;
+  if(keepF){const n=$('#rq');if(n){n.focus();try{n.setSelectionRange(cp,cp)}catch(_){}}}
   renderSheet();
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab ${st.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
 }
@@ -571,9 +678,10 @@ async function load(manual){
 }
 if(typeof document!=='undefined'){
   document.addEventListener('click',e=>{
-    const tp=e.target.closest('[data-pl],[data-sw]');
+    const tp=e.target.closest('[data-pl],[data-sw],[data-rd]');
     if(tp&&!e.target.closest('[data-prot]')){
       if(tp.dataset.sw){const [a,d,k]=tp.dataset.sw.split('|');openSheet({t:'sw',a,d,k});}
+      else if(tp.dataset.rd){openSheet({t:'rd',n:tp.dataset.rd});}
       else openSheet({t:'pl',n:tp.dataset.pl});
       return;
     }
@@ -584,6 +692,8 @@ if(typeof document!=='undefined'){
     else if(t.id==='prev'&&st.di>0){st.di--;render();}
     else if(t.id==='next'&&st.di<days().length-1){st.di++;render();}
     else if(t.dataset.rm){st.rmode=t.dataset.rm;render();}
+    else if(t.dataset.mt){st.mt=t.dataset.mt;render();}
+    else if(t.dataset.rh){st.rh=t.dataset.rh;renderSheet();}
     else if(t.dataset.view){st.view=t.dataset.view;render();}
     else if(t.dataset.wk){st.wk=t.dataset.wk;render();}
     else if(t.dataset.pos){st.pos=t.dataset.pos;render();}
@@ -591,7 +701,7 @@ if(typeof document!=='undefined'){
     else if(t.dataset.h){st.h=t.dataset.h;render();}
     else if(t.dataset.prot){const n=t.dataset.prot;st.prot.has(n)?st.prot.delete(n):st.prot.add(n);try{localStorage.setItem('leo_prot',JSON.stringify([...st.prot]))}catch(_){}render();}
   });
-  document.addEventListener('input',e=>{ if(e.target.id==='dtd'){st.dtd=Number(e.target.value)/100;const v=$('#dtdv');if(v)v.textContent=e.target.value+'%';clearTimeout(window.__dt);window.__dt=setTimeout(render,250);} });
+  document.addEventListener('input',e=>{ if(e.target.id==='rq'){st.q=e.target.value;const r=$('#rres');if(r)r.innerHTML=radarResults();return} if(e.target.id==='dtd'){st.dtd=Number(e.target.value)/100;const v=$('#dtdv');if(v)v.textContent=e.target.value+'%';clearTimeout(window.__dt);window.__dt=setTimeout(render,250);} });
   window.addEventListener('popstate',()=>{if(st.sheet){st.sheetStack=[];st.sheet=null;renderSheet()}});
   let tx=0,ty=0;
   document.addEventListener('touchstart',e=>{const t=e.touches[0];tx=t.clientX;ty=t.clientY},{passive:true});

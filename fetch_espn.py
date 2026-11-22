@@ -183,18 +183,21 @@ def main():
             "pts": pts.get(tid, 0), "live": live.get(tid, 0), "by": by.get(tid, {}), "pd": pdt.get(tid, {}), "r": r})
     # agentes libres
     flt = {"players": {"filterStatus": {"value": ["FREEAGENT", "WAIVERS"]}, "filterSlotIds": {"value": [0,1,2,3,4,5,6,11]},
-           "limit": 300, "sortPercOwned": {"sortPriority": 1, "sortAsc": False},
+           "limit": 500, "sortPercOwned": {"sortPriority": 1, "sortAsc": False},
            "filterStatsForTopScoringPeriodIds": {"value": 5, "additionalValue": [f"00{SEASON}", f"10{SEASON}", f"01{SEASON}", f"02{SEASON}", f"03{SEASON}"]}}}
     fa_raw = http(BASE + "?view=kona_player_info", {**ck, "x-fantasy-filter": json.dumps(flt)})
-    fas = []
+    fas, extra = [], []
     for en in fa_raw.get("players", []):
         p = pdata(en["player"])
-        if p["gp"] < 4: continue
+        if p["gp"] < 1: continue
         own = round((en["player"].get("ownership") or {}).get("percentOwned", 0))
         ws = "W" if en.get("status") == "WAIVERS" else "F"
-        fas.append((max(v for v in (p["l15"], p["l30"], p["s"]) if v is not None) if any(v is not None for v in (p["l15"], p["l30"], p["s"])) else 0,
-                    [p["n"], p["t"], p["inj"], p["pos"], p["s"], p["gp"], p["l7"], p["l15"], p["l30"], p["pr"], p["mn"], ws, own, p["id"]], p))
-    fas.sort(key=lambda x: -x[0]); fas = fas[:45]
+        row = [p["n"], p["t"], p["inj"], p["pos"], p["s"], p["gp"], p["l7"], p["l15"], p["l30"], p["pr"], p["mn"], ws, own, p["id"]]
+        if p["gp"] < 4: extra.append(row); continue          # muestra muy chica: solo para el buscador
+        fas.append((max(v for v in (p["l15"], p["l30"], p["s"]) if v is not None) if any(v is not None for v in (p["l15"], p["l30"], p["s"])) else 0, row, p))
+    fas.sort(key=lambda x: -x[0])
+    extra += [x[1] for x in fas[45:]]                         # el resto de agentes libres, para "Mi radar"
+    fas = fas[:45]
     # calendario NBA (hora del este) + estado de los partidos del dia actual
     sched, gs = {}, {}
     sbc = {}
@@ -290,7 +293,7 @@ def main():
     out = {"u": now.isoformat(timespec="minutes"), "sp": sp, "mu": mu,
            "muD": f"{sp_date(c0).day}-{sp_date(c1).day} {MESES[sp_date(c1).month - 1]}", "me": ME,
            "cur": cur, "nxt": nxt, "spd": spd, "teams": teams, "fa": [x[1] for x in fas], "sched": sched, "gold": gold,
-           "gs": gs, "gsd": today_k, "dbg": dbg}
+           "gs": gs, "gsd": today_k, "fs": extra, "dbg": dbg}
     with open("data.json", "w", encoding="utf-8") as f: json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
     # avisos de minas de oro (solo las nuevas)
     seen = state.get("gold", {}); nowts = int(time.time())
