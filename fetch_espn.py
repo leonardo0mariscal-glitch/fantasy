@@ -156,32 +156,68 @@ def main():
         except Exception as e:
             print("calendario fallo", day, type(e).__name__)
         day += timedelta(days=1)
-    # minas de oro
+    # minas de oro: agente libre + a quien soltar, respetando los espacios por posicion
     mine = next(t for t in teams if t["id"] == ME)
-    def g_in(team, days_):
-        n = 0
-        for k in days_:
-            for g in sched.get(k, []):
-                a, h = g.split()[0].split("@")
-                if team in (a, h): n += 1
-        return n
-    keys = sorted(sched); soon = keys[:2]
-    base = []
-    for r in mine["r"]:
-        if r[2] == "IR" or r[0] in PROTECTED: continue
-        p = dict(n=r[0], t=r[1], inj=r[3], s=r[5], l7=r[7], l15=r[8], l30=r[9], pr=r[10])
-        base.append(exp(p) * avail(p))
-    base.sort(); worst = base[0] if base else 0
-    gold = []
-    for _, _, p in fas:
-        e = exp(p); v = e * avail(p); g = g_in(p["t"], soon)
-        if g == 0 or avail(p) == 0: continue
-        gain = v - worst
-        if gain >= 4 and e >= 24:
-            trend = (p["l15"] or 0) - (p["s"] or 0)
-            why = f"{g} juego{'s' if g > 1 else ''} en 2 dias" + (f", subiendo +{trend:.0f}" if trend >= 4 else "")
-            gold.append({"n": p["n"], "t": p["t"], "pos": p["pos"], "inj": p["inj"], "e": round(e, 1), "gain": round(gain, 1), "why": why})
-    gold.sort(key=lambda x: -x["gain"]); gold = gold[:8]
+    today = key(now.date()); nowt = now.strftime("%H:%M")
+    SL = [("PG",), ("SG",), ("SF",), ("PF",), ("C",), ("PG", "SG"), ("SF", "PF"), None, None, None]
+    def game(team, day):
+        for g in sched.get(day, []):
+            m, tm = g.split(); a_, h_ = m.split("@")
+            if team in (a_, h_): return tm
+        return None
+    def slots_for(pos):
+        ps = pos.split("/"); return [i for i, x in enumerate(SL) if x is None or any(q in ps for q in x)]
+    def best_day(R, day):
+        M = 1 << len(SL); dp = [-1.0] * M; dp[0] = 0.0
+        for p in R:
+            if p["slot"] == "IR": continue
+            tm = game(p["t"], day)
+            if tm is None or (day == today and tm <= nowt): continue
+            if p.get("from") and day < p["from"]: continue
+            v = p["e"] * avail(p)
+            if v <= 0: continue
+            nd = dp[:]
+            for m in range(M):
+                if dp[m] < 0: continue
+                for sl in p["sl"]:
+                    if m >> sl & 1: continue
+                    nm = m | (1 << sl); w = dp[m] + v
+                    if w > nd[nm]: nd[nm] = w
+            dp = nd
+        return max(dp)
+    def total(R, days_): return sum(best_day(R, d) for d in days_)
+    def mk(r):
+        p = dict(n=r[0], t=r[1], slot=r[2], inj=r[3], pos=r[4], s=r[5], l7=r[7], l15=r[8], l30=r[9], pr=r[10])
+        p["e"] = exp(p); p["sl"] = slots_for(p["pos"]); return p
+    wk_days = [d for d in sorted(sched) if today <= d <= cur["end"]]
+    nx_days = [d for d in sorted(sched) if nxt["start"] <= d <= nxt["end"]]
+    both = wk_days + nx_days; soon = sorted(sched)[:2]
+    base = [mk(r) for r in mine["r"]]
+    b_wk, b_both = total(base, wk_days), total(base, both)
+    drops = sorted([p for p in base if p["slot"] != "IR" and p["n"] not in PROTECTED], key=lambda p: p["e"] * avail(p))[:5]
+    cand = []
+    for _, row, p in fas:
+        f = dict(p); f["slot"] = "BE"; f["e"] = exp(f); f["sl"] = slots_for(f["pos"])
+        if row[11] == "W": f["from"] = nxt["start"]
+        if avail(f) == 0 or not any(game(f["t"], d) for d in soon) or row[11] == "W": continue
+        cand.append((f["e"] * avail(f), f))
+    cand.sort(key=lambda x: -x[0]); gold = []
+    for _, f in cand[:10]:
+        best = None
+        for dp_ in drops:
+            R = [x for x in base if x["n"] != dp_["n"]] + [f]
+            gw, gb = total(R, wk_days) - b_wk, total(R, both) - b_both
+            if best is None or gb > best[2]: best = (dp_, gw, gb)
+        if not best: continue
+        dp_, gw, gb = best
+        if gb < 12: continue
+        fe, de = f["e"] * avail(f), dp_["e"] * avail(dp_)
+        largo = fe >= de + 3 and (f["gp"] >= 8)
+        gold.append({"n": f["n"], "t": f["t"], "pos": f["pos"], "inj": f["inj"], "e": round(f["e"], 1),
+            "drop": dp_["n"], "dropE": round(de, 1), "gw": round(gw), "gain": round(gb),
+            "label": "Para mucho tiempo" if largo else "Solo esta semana",
+            "why": f"{round(f['e'],1)} pts fantasy/juego vs {round(de,1)}"})
+    gold.sort(key=lambda x: -x["gain"]); gold = gold[:6]
     out = {"u": now.isoformat(timespec="minutes"), "sp": sp, "mu": mu,
            "muD": f"{sp_date(c0).day}-{sp_date(c1).day} {MESES[sp_date(c1).month - 1]}", "me": ME,
            "cur": cur, "nxt": nxt, "spd": spd, "teams": teams, "fa": [x[1] for x in fas], "sched": sched, "gold": gold}
@@ -193,7 +229,8 @@ def main():
     seen = {k: v for k, v in seen.items() if nowts - v < 36 * 3600}
     new = [g for g in gold if g["n"] not in seen]
     for g in new[:3]:
-        ntfy("Mina de oro: " + g["n"], f"{g['n']} ({g['t']}) rinde ~{g['e']} pts por juego, +{g['gain']} sobre tu mas flojo. {g['why']}.", "high")
+        ntfy("Mina de oro: " + g["n"],
+             f"Agrega a {g['n']} ({g['t']}): {g['e']} pts fantasy por juego.\nSuelta a {g['drop']} ({g['dropE']}).\n+{g['gain']} pts esperados en 2 semanas ({g['gw']} esta semana).\n{g['label']}.", "high")
         seen[g["n"]] = nowts
     json.dump({"gold": seen}, open("state.json", "w"))
     print(f"ok: {len(teams)} equipos, {len(fas)} agentes libres, {len(gold)} minas de oro, {len(new)} avisos nuevos")

@@ -357,8 +357,8 @@ function planView(){
 
 function goldView(){
   const G=(S.gold||[]);
-  const rows=G.length?G.map(g=>`<div class="item"><div class="grow"><div class="nm">${esc(g.n)} ${badge(g.inj)}</div><div class="meta">${g.t} · ${esc(g.pos)} · prom ${f1(g.e)} · ${esc(g.why)}</div></div><div style="text-align:right"><div class="val">+${f0(g.gain)}</div><div class="note">vs tu más flojo</div></div></div>`).join(''):'<div class="mut">Ahorita no veo ningún agente libre que valga la pena.</div>';
-  return `<div class="glass card"><h3>Minas de oro</h3><div class="note" style="margin:6px 0 10px">Agentes libres que rinden más que tu jugador más flojo y juegan pronto. El robot te avisa al teléfono cuando aparece uno nuevo.</div>${rows}</div>`;
+  const rows=G.length?G.map(g=>`<div class="item"><div class="grow"><div class="nm">${esc(g.n)} ${badge(g.inj)}</div><div class="meta">${g.t} · ${esc(g.pos)} · ${esc(g.why)}</div><div class="meta" style="margin-top:3px"><b>Suelta a ${esc(g.drop)}</b> · <span class="pill ${g.label==='Para mucho tiempo'?'good':'amber'}">${esc(g.label)}</span></div></div><div style="text-align:right"><div class="val">+${f0(g.gain)}</div><div class="note">pts en 2 sem.</div></div></div>`).join(''):'<div class="mut">Ahorita no veo ningún agente libre que valga la pena.</div>';
+  return `<div class="glass card"><h3>Minas de oro</h3><div class="note" style="margin:6px 0 10px">Puntos de fantasy de tu liga. Cada cambio respeta los espacios por posición de tu alineación. El robot te avisa al teléfono cuando aparece uno nuevo.</div>${rows}</div>`;
 }
 const TABS=[['roster','Roster'],['liga','Liga'],['agents','Agentes'],['plan','Plan'],['gold','Minas']];
 function render(){
