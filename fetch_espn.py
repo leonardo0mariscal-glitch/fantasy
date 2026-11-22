@@ -194,7 +194,8 @@ def main():
     both = wk_days + nx_days; soon = sorted(sched)[:2]
     base = [mk(r) for r in mine["r"]]
     b_wk, b_both = total(base, wk_days), total(base, both)
-    drops = sorted([p for p in base if p["slot"] != "IR" and p["n"] not in PROTECTED], key=lambda p: p["e"] * avail(p))[:5]
+    top7 = {p["n"] for p in sorted([p for p in base if p["slot"] != "IR"], key=lambda p: -p["e"])[:7]}
+    drops = sorted([p for p in base if p["slot"] != "IR" and p["n"] not in PROTECTED and p["n"] not in top7], key=lambda p: p["e"] * avail(p))[:6]
     cand = []
     for _, row, p in fas:
         f = dict(p); f["slot"] = "BE"; f["e"] = exp(f); f["sl"] = slots_for(f["pos"])
@@ -205,6 +206,7 @@ def main():
     for _, f in cand[:10]:
         best = None
         for dp_ in drops:
+            if f["e"] * avail(f) < dp_["e"] * avail(dp_) + 2: continue
             R = [x for x in base if x["n"] != dp_["n"]] + [f]
             gw, gb = total(R, wk_days) - b_wk, total(R, both) - b_both
             if best is None or gb > best[2]: best = (dp_, gw, gb)
@@ -230,7 +232,7 @@ def main():
     new = [g for g in gold if g["n"] not in seen]
     for g in new[:3]:
         ntfy("Mina de oro: " + g["n"],
-             f"Agrega a {g['n']} ({g['t']}): {g['e']} pts fantasy por juego.\nSuelta a {g['drop']} ({g['dropE']}).\n+{g['gain']} pts esperados en 2 semanas ({g['gw']} esta semana).\n{g['label']}.", "high")
+             f"Agrega a {g['n']} ({g['t']}): {g['e']} pts fantasy por juego.\nSuelta a {g['drop']} ({g['dropE']}).\n+{g['gain']} pts esperados en 2 semanas ({g['gw']:+d} esta semana).\n{g['label']}." + (" Hazlo despues del domingo." if g['gw'] < -2 else ""), "high")
         seen[g["n"]] = nowts
     json.dump({"gold": seen}, open("state.json", "w"))
     print(f"ok: {len(teams)} equipos, {len(fas)} agentes libres, {len(gold)} minas de oro, {len(new)} avisos nuevos")

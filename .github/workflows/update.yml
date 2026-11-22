@@ -1,7 +1,7 @@
 name: Actualizar liga
 on:
   schedule:
-    - cron: "7 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 permissions:
   contents: write
@@ -16,15 +16,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Recuperar estado de avisos
+        run: |
+          git fetch --depth=1 origin data 2>/dev/null && git show FETCH_HEAD:state.json > state.json 2>/dev/null || echo '{"gold":{}}' > state.json
       - name: Leer ESPN
         env:
           ESPN_S2: ${{ secrets.ESPN_S2 }}
           ESPN_SWID: ${{ secrets.ESPN_SWID }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python fetch_espn.py
-      - name: Guardar cambios
+      - name: Publicar datos (rama data, un solo commit)
         run: |
-          git config user.name "robot"
-          git config user.email "robot@users.noreply.github.com"
-          git add data.json state.json
-          git diff --cached --quiet || (git commit -m "datos $(date -u +%FT%TZ)" && git push)
+          mkdir /tmp/pub && cp data.json state.json /tmp/pub/ && cd /tmp/pub
+          git init -q -b data
+          git config user.name robot && git config user.email robot@users.noreply.github.com
+          git add . && git commit -qm "datos $(date -u +%FT%TZ)"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data

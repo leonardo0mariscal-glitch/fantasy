@@ -92,10 +92,20 @@ table.wk .n{color:#b4b6bc}
 table.wk .lk{text-decoration:line-through;color:var(--mut)}
 .right{text-align:right}
 @media (prefers-reduced-motion:no-preference){.btn,.chip,.tab{transition:transform .12s}.btn:active,.chip:active{transform:scale(.97)}}
+.tap{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tap:active{background:rgba(0,0,0,.04)}
+.chev{color:var(--mut);font-size:22px;padding-left:2px}
+#sheet{position:fixed;inset:0;z-index:50;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch;background:linear-gradient(115deg,#f4f5f7 0%,#d2d4d9 22%,#f1f2f4 38%,#aeb1b8 58%,#eceef0 74%,#c3c5cb 100%)}
+#sheet.open{display:block}
+@media (prefers-reduced-motion:no-preference){#sheet.open .wrap{animation:shin .22s ease-out}@keyframes shin{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}}
+.shbar{display:flex;align-items:center;gap:12px}
+ul.why{margin:8px 0 0;padding-left:18px;font-size:14px}ul.why li{margin:0 0 7px}
+.chip.auto{border-style:dashed}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
+<div id="sheet"></div>
 <nav aria-label="Secciones"><div class="glass" id="tabs"></div></nav>
 
 <script>
@@ -177,28 +187,50 @@ function remaining(t){
 }
 
 /* movimientos sugeridos: agregar un agente libre y soltar a alguien, sin tocar a los protegidos */
-function planMoves(h){
-  const hd=horizon(h); const me=team(S.me);
-  const base=roster(me).map(p=>({...p}));
-  const b0=weekTotal(base,hd);
-  const faList=S.fa.map(mkF).filter(f=>f.inj!=='O');
-  faList.forEach(f=>{f.from=f.ws==='W'?(h==='c'?'99':NS()):null;});
-  const scored=faList.map(f=>({f,v:f.e*avail(f)*gamesIn(f.t,hd)})).sort((a,b)=>b.v-a.v).slice(0,16);
-  const drops=base.filter(p=>p.slot!=='IR'&&!st.prot.has(p.n)).map(p=>({p,v:p.e*avail(p)*gamesIn(p.t,hd)})).sort((a,b)=>a.v-b.v).slice(0,9);
+/* ---------- reglas de cambios ---------- */
+const autoProt=R=>new Set(R.filter(p=>p.slot!=='IR').sort((a,b)=>b.e-a.e).slice(0,7).map(p=>p.n));
+const hdOf=k=>k==='b'?[...hdays('c'),...hdays('n')]:horizon(k);
+function evalSwap(R0,f,d,hd,base){
+  const R=R0.filter(x=>x.n!==d.n).concat([{...f,slot:'BE',from:(f.ws==='W'?NS():null)}]);
+  const rows=hd.map((day,i)=>{const sk=day===todayKey();const a=base?base[i]:bestDay(R0,day,sk).tot,b=bestDay(R,day,sk).tot;return {day,a,b,diff:b-a}});
+  return {rows,gain:rows.reduce((s,r)=>s+r.diff,0),R};
+}
+const labelOf=(f,d)=>(f.e*avail(f)>=d.e*avail(d)+3&&f.gp>=8)?'Para mucho tiempo':'Solo esta semana';
+function swapList(hd,lim){
+  const R0=roster(team(S.me)), AP=autoProt(R0);
+  const drops=R0.filter(p=>p.slot!=='IR'&&!st.prot.has(p.n)&&!AP.has(p.n)).sort((a,b)=>a.e*avail(a)-b.e*avail(b)).slice(0,6);
+  const base=hd.map(d=>bestDay(R0,d,d===todayKey()).tot);
+  const fas=S.fa.map(mkF).filter(f=>f.inj!=='O'&&avail(f)>0).map(f=>({f,v:f.e*avail(f)*gamesIn(f.t,hd)})).sort((a,b)=>b.v-a.v).slice(0,12);
   const out=[];
-  for(const {f} of scored){
-    const fp={...f,slot:'BE'};
-    for(const {p} of drops){
-      const R=base.filter(x=>x.n!==p.n); R.push(fp);
-      const g=weekTotal(R,hd)-b0;
-      if(g>0.5) out.push({add:f,drop:p,gain:g});
+  for(const {f} of fas){
+    let best=null;
+    for(const d of drops){
+      if(f.e*avail(f)<d.e*avail(d)+2)continue;
+      const ev=evalSwap(R0,f,d,hd,base);
+      if(!best||ev.gain>best.ev.gain)best={d,ev};
     }
+    if(best&&best.ev.gain>0.5)out.push({add:f,drop:best.d,ev:best.ev,gain:best.ev.gain,label:labelOf(f,best.d)});
   }
   out.sort((a,b)=>b.gain-a.gain);
-  const seen=new Set(),res=[];
-  for(const o of out){ const k=o.add.n; if(seen.has(k))continue; seen.add(k); res.push(o); if(res.length>=6)break; }
-  return {b0,res,hd};
+  return out.slice(0,lim);
 }
+function planMoves(h){
+  const hd=horizon(h), base=roster(team(S.me)).map(p=>({...p}));
+  return {b0:weekTotal(base,hd),res:swapList(hd,6),hd};
+}
+function goldList(){
+  const soon=days().slice(0,2);
+  return swapList(hdOf('b'),12).filter(o=>o.gain>=12&&o.add.ws!=='W'&&soon.some(d=>game(o.add.t,d)));
+}
+function findAny(name){
+  for(const t of S.teams){for(const a of t.r){if(a[0]===name){const p=mkP(a);p.owner=t.id;return p}}}
+  for(const a of S.fa){if(a[0]===name){const p=mkF(a);p.owner=0;return p}}
+  return null;
+}
+function rankIn(R,p){return R.filter(x=>x.slot!=='IR').sort((a,b)=>b.e-a.e).findIndex(x=>x.n===p.n)+1}
+const swapRow=(o,k)=>`<div class="item tap" data-sw="${esc(o.add.n)}|${esc(o.drop.n)}|${k}">${av(o.add,'sm')}<div class="grow"><div class="nm">Agregar ${esc(o.add.n)} ${o.add.ws==='W'?'<span class="pill">Waivers</span>':''} ${badge(o.add.inj)}</div>
+  <div class="meta">Soltar a ${esc(o.drop.n)} · ${f1(o.add.e*avail(o.add))} vs ${f1(o.drop.e*avail(o.drop))} pts fantasy · <span class="pill ${o.label==='Para mucho tiempo'?'good':'amber'}">${o.label}</span></div></div>
+  <div style="text-align:right"><div class="val">+${f0(o.gain)}</div><div class="note">pts</div></div><div class="chev">›</div></div>`;
 
 /* ---------- vistas ---------- */
 const $=s=>document.querySelector(s);
@@ -217,7 +249,7 @@ function header(){
      <div class="stat"><div class="lab">${sorted[0].id===S.me?'Segundo lugar':'Líder'}</div><div class="big">${lead.pts}</div><div class="note">${esc(tn(lead))}</div></div>
      <div class="gap"><span class="mut">${gap>=0?'Ventaja':'Diferencia'}</span><span class="big" style="font-size:28px;color:${gap>=0?'var(--good)':'var(--amber)'}">${gap>=0?'+':'−'}${Math.abs(gap)}</span></div>
    </div>
-   <div class="note" style="margin-top:8px">Datos de ESPN ${ageText()}.${old?' <b style="color:var(--warn)">Desactualizados:</b> el robot no ha corrido.':''}${st.refMsg?' '+esc(st.refMsg):''}</div></div>`;
+   <div class="note" style="margin-top:8px">Última lectura de ESPN ${ageText()}.${old?' <b style="color:var(--warn)">Desactualizados:</b> el robot no ha corrido.':''}${st.refMsg?' '+esc(st.refMsg):''}</div></div>`;
 }
 
 function dayView(){
@@ -233,7 +265,7 @@ function dayView(){
     if(g&&!lock&&isStart&&!optSet.has(p.n)&&ups.length) tag='<span class="pill amber">Mejor en banca</span>';
     if(g&&!lock&&!isStart&&optSet.has(p.n)) tag='<span class="pill good">Mejor titular</span>';
     const v=g?p.e*avail(p):null;
-    return `<div class="item"><div class="slot ${p.slot}">${p.slot}</div>${av(p)}<div class="grow"><div class="nm">${esc(p.n)} ${badge(p.inj)}</div>
+    return `<div class="item tap" data-pl="${esc(p.n)}"><div class="slot ${p.slot}">${p.slot}</div>${av(p)}<div class="grow"><div class="nm">${esc(p.n)} ${badge(p.inj)}</div>
       <div class="meta">${p.t} · ${p.pos} · ${g?esc(g.opp)+' '+tm12(g.time)+(lock?' · ya empezó':''):'sin partido'} ${tag}</div></div>
       <div class="val">${v==null?'<span class="mut">–</span>':'≈'+f0(v)}</div></div>`}).join('');
   const sw=ups.length?`<div class="note" style="margin-top:8px"><b>Sube:</b> ${ups.map(esc).join(', ')} · <b>baja:</b> ${downs.map(esc).join(', ')||'–'}. Esperado ${f0(opt.tot)} vs ${f0(curTot)} con tu alineación actual.</div>`:`<div class="note" style="margin-top:8px">Tu alineación actual ya es la mejor que veo para este día: esperado ${f0(curTot)} pts con ${curN} titulares jugando.</div>`;
@@ -304,7 +336,7 @@ function ligaView(){
     const rm=remaining(t), proj=t.pts+rm.tot, isMe=t.id===S.me;
     const body=roster(t).sort((a,b)=>ORDER.indexOf(a.slot)-ORDER.indexOf(b.slot)).map(p=>{
       const sun=game(p.t,END())?1:0, wk=gamesIn(p.t,horizon('n'));
-      return `<div class="item" style="padding:6px 0"><div class="slot ${p.slot}">${p.slot}</div>${av(p,'sm')}<div class="grow"><span class="nm">${esc(p.n)}</span> ${badge(p.inj)}<div class="meta">${p.t} · prom ${f1(p.e)} · ${dl(END()).slice(0,3).toLowerCase()} ${sun} · sem. ${S.mu+1}: ${wk} juegos</div></div></div>`}).join('');
+      return `<div class="item tap" data-pl="${esc(p.n)}" style="padding:6px 0"><div class="slot ${p.slot}">${p.slot}</div>${av(p,'sm')}<div class="grow"><span class="nm">${esc(p.n)}</span> ${badge(p.inj)}<div class="meta">${p.t} · prom ${f1(p.e)} · ${dl(END()).slice(0,3).toLowerCase()} ${sun} · sem. ${S.mu+1}: ${wk} juegos</div></div></div>`}).join('');
     return `<details class="glass card"${isMe?' open':''}><summary><div class="row"><div class="big" style="font-size:26px;width:22px">${i+1}</div><div class="grow"><div class="nm" style="font-weight:700">${esc(tn(t))}</div>
       <div class="note">récord ${t.rec} · movimientos ${t.acq}/7</div>
       <div class="bar ${isMe?'me':''}" style="margin-top:6px"><i style="width:${Math.max(4,t.pts/max*100)}%"></i></div></div>
@@ -326,7 +358,7 @@ function agentsView(){
   L.sort((a,b)=>b.v-a.v);
   const chips=['ALL','PG','SG','SF','PF','C'].map(p=>`<button class="chip ${st.pos===p?'on':''}" data-pos="${p}">${p==='ALL'?'Todos':p}</button>`).join('');
   const rows=L.slice(0,30).map(x=>{const f=x.f;const trend=(f.l15!=null&&f.s!=null&&f.l15-f.s>=4)?'<span class="pill good">Subiendo</span>':'';const rare=f.own<45?'<span class="pill amber">Poco visto</span>':'';
-    return `<div class="item">${av(f,'sm')}<div class="grow"><div class="nm">${esc(f.n)} ${badge(f.inj)} ${f.ws==='W'?'<span class="pill">Waivers</span>':''}</div>
+    return `<div class="item tap" data-pl="${esc(f.n)}">${av(f,'sm')}<div class="grow"><div class="nm">${esc(f.n)} ${badge(f.inj)} ${f.ws==='W'?'<span class="pill">Waivers</span>':''}</div>
       <div class="meta">${f.t} · ${f.pos} · prom ${f1(f.s)} · últ. 15: ${f1(f.l15)} · ${f.mn!=null?f0(f.mn)+' min':'– min'} · ${f.own}% dueño ${trend} ${rare}</div></div>
       <div style="text-align:right"><div class="val">${x.g}</div><div class="note">juegos</div></div>
       <div style="text-align:right;min-width:52px"><div class="val" style="color:var(--amber)">${f0(x.v)}</div><div class="note">sem. ${S.mu+1}</div></div></div>`}).join('');
@@ -340,10 +372,9 @@ function planView(){
   const used=st.h==='n'?0:me.acq, left=7-used;
   const dayRows=P.hd.map(d=>{const o=bestDay(R,d,false);const pct=o.cnt/10*100;const g=(S.sched[d]||[]).length;
     return `<div class="row" style="padding:5px 0"><div style="width:76px" class="note">${dl(d)}</div><div class="grow"><div class="bar ${o.cnt<10?'':'me'}"><i style="width:${Math.max(3,pct)}%"></i></div></div><div class="num" style="width:62px;text-align:right"><b>${o.cnt}</b>/10</div><div class="num mut" style="width:48px;text-align:right">≈${f0(o.tot)}</div></div>`}).join('');
-  const moves=P.res.length?P.res.map(o=>`<div class="item"><div class="grow"><div class="nm">Agregar ${esc(o.add.n)} ${o.add.ws==='W'?'<span class="pill">Waivers</span>':''} ${badge(o.add.inj)}</div>
-    <div class="meta">Soltar a ${esc(o.drop.n)} · ${o.add.t} ${gamesIn(o.add.t,P.hd)} juegos vs ${o.drop.t} ${gamesIn(o.drop.t,P.hd)} juegos</div></div>
-    <div style="text-align:right"><div class="val" style="color:var(--good)">+${f0(o.gain)}</div><div class="note">pts</div></div></div>`).join(''):'<div class="mut">Con los datos actuales no veo un cambio que sume más de medio punto esperado.</div>';
-  const prot=R.filter(p=>p.slot!=='IR').map(p=>`<button class="chip ${st.prot.has(p.n)?'on':''}" data-prot="${esc(p.n)}">${esc(p.n)}</button>`).join('');
+  const moves=P.res.length?P.res.map(o=>swapRow(o,st.h)).join(''):'<div class="mut">Con las reglas actuales no veo un cambio que valga la pena: ningún agente libre supera con claridad a tus jugadores soltables.</div>';
+  const AP=autoProt(R);
+  const prot=R.filter(p=>p.slot!=='IR').map(p=>`<button class="chip ${st.prot.has(p.n)?'on':AP.has(p.n)?'auto':''}" data-prot="${esc(p.n)}">${esc(p.n)}${!st.prot.has(p.n)&&AP.has(p.n)?' · auto':''}</button>`).join('');
   return `<div class="glass card"><h3>Planificador de movimientos</h3>
     <div class="chips" style="margin:10px 0"><button class="chip ${st.h==='n'?'on':''}" data-h="n">Semana ${S.mu+1} (${rng(NS(),NE())})</button><button class="chip ${st.h==='c'?'on':''}" data-h="c">Resto de la semana ${S.mu}</button></div>
     <div class="row"><div class="grow"><div class="note">Movimientos disponibles</div><div class="big" style="font-size:34px">${left} <span class="mut" style="font-size:18px">de 7</span></div></div>
@@ -351,37 +382,133 @@ function planView(){
     <div class="warnbox" style="margin-top:10px">Tu liga usa waivers de 1 día. Si sueltas a alguien, no puedes recogerlo de inmediato, y quien esté en waivers tarda en llegar.</div></div>
     <div class="glass card"><h3>Espacios llenos por día</h3><div class="note" style="margin:6px 0 8px">Cuántos de tus 10 titulares pueden jugar ese día con tu roster actual, y los puntos esperados.</div>${dayRows}</div>
     <div class="glass card"><h3>Mejores cambios</h3><div class="note" style="margin:6px 0 4px">Cada uno gasta 1 movimiento. La ganancia es en puntos esperados de todo el periodo.</div>${moves}</div>
-    <div class="glass card"><h3>No soltar</h3><div class="note" style="margin:6px 0 10px">Toca un nombre para protegerlo o liberarlo. Los protegidos nunca aparecen como jugador a soltar.</div><div class="chips">${prot}</div>
+    <div class="glass card"><h3>No soltar</h3><div class="note" style="margin:6px 0 10px">Toca un nombre para protegerlo a mano. Los marcados "auto" son tus 7 mejores por rendimiento esperado: la app tampoco los sugiere soltar aunque no los marques.</div><div class="chips">${prot}</div>
     <div style="margin-top:14px"><div class="row"><div class="grow note">Probabilidad de que un jugador en día a día juegue</div><b class="num" id="dtdv">${Math.round(st.dtd*100)}%</b></div><input type="range" id="dtd" min="0" max="100" step="5" value="${Math.round(st.dtd*100)}" aria-label="Probabilidad de jugar en día a día"></div></div>`;
 }
 
 function goldView(){
-  const G=(S.gold||[]);
-  const rows=G.length?G.map(g=>`<div class="item"><div class="grow"><div class="nm">${esc(g.n)} ${badge(g.inj)}</div><div class="meta">${g.t} · ${esc(g.pos)} · ${esc(g.why)}</div><div class="meta" style="margin-top:3px"><b>Suelta a ${esc(g.drop)}</b> · <span class="pill ${g.label==='Para mucho tiempo'?'good':'amber'}">${esc(g.label)}</span></div></div><div style="text-align:right"><div class="val">+${f0(g.gain)}</div><div class="note">pts en 2 sem.</div></div></div>`).join(''):'<div class="mut">Ahorita no veo ningún agente libre que valga la pena.</div>';
-  return `<div class="glass card"><h3>Minas de oro</h3><div class="note" style="margin:6px 0 10px">Puntos de fantasy de tu liga. Cada cambio respeta los espacios por posición de tu alineación. El robot te avisa al teléfono cuando aparece uno nuevo.</div>${rows}</div>`;
+  const G=goldList();
+  const rows=G.length?G.map(o=>swapRow(o,'b')).join(''):'<div class="mut">Ahorita no veo ningún agente libre que valga la pena.</div>';
+  return `<div class="glass card"><h3>Minas de oro</h3><div class="note" style="margin:6px 0 10px">Puntos de fantasy de tu liga. Cada cambio respeta tus espacios por posición y nunca toca a tus 7 mejores. Toca uno para ver el desglose.</div>${rows}</div>`;
 }
 const TABS=[['roster','Roster'],['liga','Liga'],['agents','Agentes'],['plan','Plan'],['gold','Minas']];
+/* ---------- hojas de detalle ---------- */
+const barRow=(l,v,max)=>`<div class="row" style="padding:4px 0"><div style="width:86px" class="note">${l}</div><div class="grow"><div class="bar"><i style="width:${v==null?0:Math.max(3,Math.min(100,v/max*100))}%"></i></div></div><div class="num" style="width:44px;text-align:right"><b>${f1(v)}</b></div></div>`;
+function schedRows(p,hd){
+  return hd.map(d=>{const g=game(p.t,d);return `<tr><td style="text-align:left">${dl(d)}</td><td>${g?esc(g.opp)+' '+tm12(g.time):'<span class="mut">sin partido</span>'}</td><td class="y">${g?'≈'+f0(p.e*avail(p)):'–'}</td></tr>`}).join('');
+}
+function playerSheet(name){
+  const p=findAny(name); if(!p)return '<div class="mut">No encontré a este jugador.</div>';
+  const mineR=roster(team(S.me)), mine=p.owner===S.me, fa=p.owner===0;
+  const owner=fa?'Agente libre':(mine?'Tu equipo':tn(team(p.owner)));
+  const hdW=hdays('c'), hdN=hdays('n'), gW=gamesIn(p.t,hdW), gN=gamesIn(p.t,hdN), pr=avail(p);
+  const why=[];
+  const tr=(p.l15!=null&&p.s!=null)?p.l15-p.s:null;
+  if(tr!=null&&tr>=3)why.push(`Viene subiendo: ${f1(p.l15)} en sus últimos 15 partidos contra ${f1(p.s)} de promedio de temporada.`);
+  if(tr!=null&&tr<=-3)why.push(`Viene bajando: ${f1(p.l15)} en sus últimos 15 contra ${f1(p.s)} de temporada.`);
+  if(p.mn!=null)why.push(p.mn>=28?`Juega ${f0(p.mn)} minutos por partido: rol sólido.`:p.mn<20?`Solo ${f0(p.mn)} minutos por partido: rinde menos de lo que parece y es más riesgoso.`:`Juega ${f0(p.mn)} minutos por partido.`);
+  why.push(`${gW} partido${gW===1?'':'s'} lo que resta de esta semana y ${gN} la siguiente.`);
+  if(p.inj==='DTD')why.push(`Está en día a día: cuento ${Math.round(st.dtd*100)}% de probabilidad de que juegue.`);
+  if(p.inj==='O'||p.inj==='IR')why.push('Está fuera: hoy no suma puntos.');
+  if(fa&&p.own!=null)why.push(p.own<50?`Solo ${f0(p.own)}% de las ligas lo tiene: poca gente lo está viendo.`:`${f0(p.own)}% de las ligas lo tiene.`);
+  if(fa&&p.ws==='W')why.push('Está en waivers: no lo puedes tener hasta la próxima semana.');
+  let role='';
+  if(mine){
+    const rk=rankIn(mineR,p),AP=autoProt(mineR);
+    const days_=hdW.concat(hdN).filter(d=>game(p.t,d));
+    let st_=0;for(const d of days_){const o=bestDay(mineR,d,d===todayKey());if(o.assign.some(a=>a.p.n===p.n))st_++}
+    role=`<div class="glass card"><h3>En tu alineación</h3><div class="meta" style="margin-top:8px">Es el #${rk} de tu roster por rendimiento esperado. ${st.prot.has(p.n)?'Lo marcaste como no soltar.':AP.has(p.n)?'La app lo protege sola: está entre tus 7 mejores.':'No está protegido: podría salir en un cambio si aparece alguien claramente mejor.'}</div>
+      <div class="meta" style="margin-top:6px">${days_.length?`Con la mejor alineación sería titular ${st_} de ${days_.length} días con partido.`:'No tiene partidos en las próximas dos semanas.'}</div></div>`;
+  } else if(fa){
+    const sw=swapList(hdOf('b'),12).find(o=>o.add.n===p.n);
+    role=`<div class="glass card"><h3>¿Te conviene?</h3>${sw?`<div class="meta" style="margin-top:8px">Sí: soltando a <b>${esc(sw.drop.n)}</b> sumas ≈${f0(sw.gain)} pts en dos semanas. <span class="pill ${sw.label==='Para mucho tiempo'?'good':'amber'}">${sw.label}</span></div><div style="margin-top:10px"><button class="btn" data-sw="${esc(p.n)}|${esc(sw.drop.n)}|b">Ver desglose del cambio</button></div>`:`<div class="meta" style="margin-top:8px">Ahorita no encuentro un cambio que valga la pena: o no supera con claridad a tus jugadores soltables, o no te cabe en la alineación.</div>`}</div>`;
+  }
+  const hd=hdW.concat(hdN);
+  return `<div class="glass card"><div class="row" style="gap:14px">${av(p)}<div class="grow"><h2>${esc(p.n)}</h2><div class="meta">${p.t} · ${esc(p.pos)} · ${esc(owner)} ${badge(p.inj)}</div></div></div>
+    <div class="hero" style="margin-top:14px"><div class="stat"><div class="lab">Esperado por partido</div><div class="big">${f1(p.e*pr)}</div><div class="note">pts fantasy${pr<1?' (con riesgo de lesión)':''}</div></div>
+    <div class="stat"><div class="lab">Partidos jugados</div><div class="big">${p.gp||'–'}</div><div class="note">${p.mn!=null?f0(p.mn)+' min por partido':''}</div></div></div></div>
+    <div class="glass card"><h3>Por qué</h3><ul class="why">${why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+    ${role}
+    <div class="glass card"><h3>Puntos fantasy por partido</h3><div style="margin-top:8px">${barRow('Temporada',p.s,70)}${barRow('Últ. 30',p.l30,70)}${barRow('Últ. 15',p.l15,70)}${barRow('Últ. 7',p.l7,70)}${barRow('Proy. ESPN',p.pr,70)}</div></div>
+    <div class="glass card"><h3>Calendario</h3><div class="scroll"><table class="wk"><tr><th style="text-align:left">Día</th><th>Rival</th><th>Esperado</th></tr>${schedRows(p,hd)}</table></div></div>`;
+}
+function swapSheet(a,d,k){
+  const f=findAny(a), p=findAny(d); if(!f||!p)return '<div class="mut">No encontré este cambio.</div>';
+  const hd=hdOf(k), R0=roster(team(S.me)), AP=autoProt(R0), ev=evalSwap(R0,{...f,slot:'BE'},p,hd);
+  const lab=labelOf(f,p), fe=f.e*avail(f), de=p.e*avail(p);
+  const gWk=ev.rows.filter(r=>hdays('c').includes(r.day)).reduce((s,r)=>s+r.diff,0), gNx=ev.rows.filter(r=>hdays('n').includes(r.day)).reduce((s,r)=>s+r.diff,0);
+  let starts=0,play=0;for(const day of hd){if(game(f.t,day)){play++;const o=bestDay(ev.R,day,day===todayKey());if(o.assign.some(x=>x.p.n===f.n))starts++}}
+  const rk=rankIn(R0,p);
+  const bul=[];
+  bul.push(`${esc(f.n)} rinde ${f1(fe)} pts fantasy por partido y ${esc(p.n)} ${f1(de)}: ${fe>=de?'+':''}${f1(fe-de)} por partido.`);
+  bul.push(`${esc(f.n)} juega ${gamesIn(f.t,hdays('c'))} ${gamesIn(f.t,hdays('c'))===1?'partido':'partidos'} esta semana y ${gamesIn(f.t,hdays('n'))} la siguiente; ${esc(p.n)} juega ${gamesIn(p.t,hdays('c'))} y ${gamesIn(p.t,hdays('n'))}.`);
+  bul.push(play?`Entraría como titular en ${starts} de ${play} días con partido, respetando tus espacios por posición (${esc(f.pos)}).`:`No tiene partidos en este periodo.`);
+  bul.push(lab==='Para mucho tiempo'?`Es para mucho tiempo: rinde claramente más por partido y no solo por tener más juegos.`:`Es solo para esta semana: la ganancia viene sobre todo de que juega más partidos o de una racha, no de ser claramente mejor que ${esc(p.n)}.`);
+  bul.push(`${esc(p.n)} es el #${rk} de tu roster por rendimiento esperado${AP.has(p.n)?' (ojo: está entre tus mejores)':' y no está entre los 7 que la app protege'}.`);
+  if(f.inj==='DTD')bul.push(`${esc(f.n)} está en día a día: ya descuento ${Math.round((1-st.dtd)*100)}% por riesgo de que no juegue.`);
+  if(f.ws==='W')bul.push(`Está en waivers: solo cuenta desde la próxima semana.`);
+  if(gWk<-2)bul.push(`Ojo: te cuesta ${f0(-gWk)} pts esta semana. Si lo haces después del último partido de la semana (domingo), conservas a ${esc(p.n)} para sus partidos de ahora y no pierdes esos puntos.`);
+  bul.push('Gasta 1 de tus movimientos de la semana. Si sueltas a '+esc(p.n)+', un compañero de la liga lo puede recoger.');
+  const rows=ev.rows.filter(r=>Math.abs(r.diff)>0.05||game(f.t,r.day)||game(p.t,r.day)).map(r=>`<tr><td style="text-align:left">${dl(r.day)}</td><td>≈${f0(r.a)}</td><td>≈${f0(r.b)}</td><td class="y">${r.diff>=0?'+':''}${f0(r.diff)}</td></tr>`).join('');
+  return `<div class="glass card"><h3>Cambio</h3><div class="row" style="gap:10px;margin-top:10px">${av(f)}<div class="grow"><div class="note">Agregar</div><div class="nm" style="font-size:17px">${esc(f.n)}</div><div class="meta">${f.t} · ${esc(f.pos)} ${badge(f.inj)}</div></div></div>
+    <div class="row" style="gap:10px;margin-top:12px">${av(p)}<div class="grow"><div class="note">Soltar</div><div class="nm" style="font-size:17px">${esc(p.n)}</div><div class="meta">${p.t} · ${esc(p.pos)} ${badge(p.inj)}</div></div></div>
+    <div class="hero" style="margin-top:14px"><div class="stat"><div class="lab">Suma</div><div class="big">+${f0(ev.gain)}</div><div class="note">pts en ${k==='b'?'2 semanas':'el periodo'}</div></div><div class="stat"><div class="lab">Para</div><div class="big" style="font-size:26px;line-height:1.1">${lab}</div></div></div>
+    <div class="note" style="margin-top:8px">Esta semana ${gWk>=0?'+':''}${f0(gWk)} · siguiente ${gNx>=0?'+':''}${f0(gNx)}</div></div>
+    <div class="glass card"><h3>Por qué</h3><ul class="why">${bul.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    <div class="glass card"><h3>Día por día</h3><div class="note" style="margin:6px 0 8px">Puntos esperados de tu mejor alineación, sin el cambio y con el cambio.</div><div class="scroll"><table class="wk"><tr><th style="text-align:left">Día</th><th>Sin</th><th>Con</th><th>Dif.</th></tr>${rows}</table></div></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="chip" data-pl="${esc(f.n)}">Ver a ${esc(f.n)}</button><button class="chip" data-pl="${esc(p.n)}">Ver a ${esc(p.n)}</button></div>`;
+}
+function renderSheet(){
+  const el=document.getElementById('sheet'); if(!el)return;
+  const s=st.sheet;
+  if(!s){el.innerHTML='';el.className='';document.body.style.overflow='';return}
+  const body=s.t==='sw'?swapSheet(s.a,s.d,s.k):playerSheet(s.n);
+  const keep=el.firstElementChild?el.scrollTop:0;
+  el.className='open';
+  el.innerHTML=`<div class="wrap"><div class="shbar"><button class="arrow" id="back" aria-label="Atrás">‹</button><div class="note">Desliza hacia la derecha para volver</div></div>${body}</div>`;
+  document.body.style.overflow='hidden';
+}
+function openSheet(s){st.sheetStack=(st.sheetStack||[]);if(st.sheet)st.sheetStack.push(st.sheet);else{try{history.pushState({sheet:1},'')}catch(_){}}st.sheet=s;renderSheet();const el=document.getElementById('sheet');if(el)el.scrollTop=0}
+function closeSheet(fromPop){
+  if(st.sheetStack&&st.sheetStack.length){st.sheet=st.sheetStack.pop();renderSheet();return}
+  st.sheet=null;renderSheet();
+  if(!fromPop){try{if(history.state&&history.state.sheet)history.back()}catch(_){}}
+}
+
 function render(){
   const body=st.tab==='roster'?rosterView():st.tab==='liga'?ligaView():st.tab==='agents'?agentsView():st.tab==='plan'?planView():goldView();
   $('#app').innerHTML=header()+body;
+  renderSheet();
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab ${st.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
 }
 
 let busy=false;
+const DATA_URL='https://raw.githubusercontent.com/leonardo0mariscal-glitch/fantasy/data/data.json';
+async function getData(){
+  for(const u of [DATA_URL+'?t='+Date.now(),'data.json?t='+Date.now()]){
+    try{const r=await fetch(u,{cache:'no-store'});if(r.ok){const j=await r.json();if(j&&j.teams)return j}}catch(_){}
+  }
+  return null;
+}
 async function load(manual){
   if(busy)return; busy=true; st.refBusy=true; if(manual){st.refMsg='';} render();
   let msg='';
-  try{
-    const r=await fetch('data.json?'+Date.now(),{cache:'no-store'});
-    if(!r.ok)throw new Error('http '+r.status);
-    const j=await r.json();
-    if(j&&j.teams){ const nuevo=Date.parse(j.u)>Date.parse(S.u); S=j; msg=nuevo?'Datos nuevos.':'Ya es lo más reciente.'; }
-  }catch(e){ msg='No pude leer los datos; se muestran los últimos que tenía.'; }
+  const j=await getData();
+  if(j){const nuevo=Date.parse(j.u)>Date.parse(S.u); const cambio=JSON.stringify(j.teams.map(t=>t.pts))!==JSON.stringify(S.teams.map(t=>t.pts)); S=j;
+    msg=nuevo?(cambio?'Datos nuevos de ESPN.':'Revisado: ESPN no tiene cambios nuevos.'):'Aún no hay lectura nueva del robot (revisa ESPN cada 5 min).';}
+  else msg='No pude leer los datos; se muestran los últimos que tenía.';
   busy=false; st.refBusy=false; st.refMsg=manual?msg:''; render();
 }
 if(typeof document!=='undefined'){
   document.addEventListener('click',e=>{
+    const tp=e.target.closest('[data-pl],[data-sw]');
+    if(tp&&!e.target.closest('[data-prot]')){
+      if(tp.dataset.sw){const [a,d,k]=tp.dataset.sw.split('|');openSheet({t:'sw',a,d,k});}
+      else openSheet({t:'pl',n:tp.dataset.pl});
+      return;
+    }
     const t=e.target.closest('button'); if(!t)return;
+    if(t.id==='back'){closeSheet();return}
     if(t.dataset.tab){st.tab=t.dataset.tab;render();window.scrollTo(0,0);}
     else if(t.id==='refresh')load(true);
     else if(t.id==='prev'&&st.di>0){st.di--;render();}
@@ -394,6 +521,10 @@ if(typeof document!=='undefined'){
     else if(t.dataset.prot){const n=t.dataset.prot;st.prot.has(n)?st.prot.delete(n):st.prot.add(n);try{localStorage.setItem('leo_prot',JSON.stringify([...st.prot]))}catch(_){}render();}
   });
   document.addEventListener('input',e=>{ if(e.target.id==='dtd'){st.dtd=Number(e.target.value)/100;const v=$('#dtdv');if(v)v.textContent=e.target.value+'%';clearTimeout(window.__dt);window.__dt=setTimeout(render,250);} });
+  window.addEventListener('popstate',()=>{if(st.sheet){st.sheetStack=[];st.sheet=null;renderSheet()}});
+  let tx=0,ty=0;
+  document.addEventListener('touchstart',e=>{const t=e.touches[0];tx=t.clientX;ty=t.clientY},{passive:true});
+  document.addEventListener('touchend',e=>{if(!st.sheet)return;const t=e.changedTouches[0];const dx=t.clientX-tx,dy=Math.abs(t.clientY-ty);if(dx>80&&dy<70&&!e.target.closest('.scroll'))closeSheet()},{passive:true});
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden)load(false); });
   setInterval(()=>load(false),5*60*1000);
   const t0=days().indexOf(todayKey()); st.di=Math.max(0,t0);
