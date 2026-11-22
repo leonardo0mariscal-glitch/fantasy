@@ -483,19 +483,28 @@ function render(){
 }
 
 let busy=false;
-const DATA_URL='https://raw.githubusercontent.com/leonardo0mariscal-glitch/fantasy/data/data.json';
+const REPO='leonardo0mariscal-glitch/fantasy';
+const API_URL='https://api.github.com/repos/'+REPO+'/contents/data.json?ref=data';
+const DATA_URL='https://raw.githubusercontent.com/'+REPO+'/data/data.json';
+let lastLoad=0;
 async function getData(){
-  for(const u of [DATA_URL+'?t='+Date.now(),'data.json?t='+Date.now()]){
-    try{const r=await fetch(u,{cache:'no-store'});if(r.ok){const j=await r.json();if(j&&j.teams)return j}}catch(_){}
+  // 1) API de GitHub (sin la caché de 5 min de raw); 2) raw; 3) copia local
+  const tries=[
+    [API_URL+'&t='+Date.now(),{cache:'no-store',headers:{Accept:'application/vnd.github.raw+json'}}],
+    [DATA_URL+'?t='+Date.now(),{cache:'no-store'}],
+    ['data.json?t='+Date.now(),{cache:'no-store'}]
+  ];
+  for(const [u,o] of tries){
+    try{const r=await fetch(u,o);if(r.ok){const j=await r.json();if(j&&j.teams)return j}}catch(_){}
   }
   return null;
 }
 async function load(manual){
   if(busy)return; busy=true; st.refBusy=true; if(manual){st.refMsg='';} render();
   let msg='';
-  const j=await getData();
+  const j=await getData(); lastLoad=Date.now();
   if(j){const nuevo=Date.parse(j.u)>Date.parse(S.u); const cambio=JSON.stringify(j.teams.map(t=>t.pts))!==JSON.stringify(S.teams.map(t=>t.pts)); S=j;
-    msg=nuevo?(cambio?'Datos nuevos de ESPN.':'Revisado: ESPN no tiene cambios nuevos.'):'Aún no hay lectura nueva del robot (revisa ESPN cada 5 min).';}
+    msg=nuevo?(cambio?'Datos nuevos de ESPN.':'Revisado: ESPN no tiene cambios nuevos.'):'Aún no hay lectura nueva del robot (el robot lee ESPN cada ~2 min).';}
   else msg='No pude leer los datos; se muestran los últimos que tenía.';
   busy=false; st.refBusy=false; st.refMsg=manual?msg:''; render();
 }
@@ -525,8 +534,8 @@ if(typeof document!=='undefined'){
   let tx=0,ty=0;
   document.addEventListener('touchstart',e=>{const t=e.touches[0];tx=t.clientX;ty=t.clientY},{passive:true});
   document.addEventListener('touchend',e=>{if(!st.sheet)return;const t=e.changedTouches[0];const dx=t.clientX-tx,dy=Math.abs(t.clientY-ty);if(dx>80&&dy<70&&!e.target.closest('.scroll'))closeSheet()},{passive:true});
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden)load(false); });
-  setInterval(()=>load(false),5*60*1000);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&Date.now()-lastLoad>60000)load(false); });
+  setInterval(()=>load(false),3*60*1000);
   const t0=days().indexOf(todayKey()); st.di=Math.max(0,t0);
   render(); load(false).then(()=>{const i=days().indexOf(todayKey());if(i>=0){st.di=i;render();}});
 }
