@@ -34,6 +34,38 @@ def http(url, headers=None, tries=3):
             if i == tries - 1: raise
         time.sleep(3 * (i + 1))
 
+def team_env():
+    """{abreviatura: [puntos a favor por juego, puntos en contra por juego]} desde la tabla de posiciones de ESPN.
+    Sirve para un ajuste chico por rival (defensa y ritmo). Si falla, devuelve ({}, motivo) y la app lo ignora."""
+    why, names = [], set()
+    for url in ("https://site.api.espn.com/apis/v2/sports/basketball/nba/standings",
+                "https://site.web.api.espn.com/apis/v2/sports/basketball/nba/standings?region=us&lang=en&contentorigin=espn&type=0&level=1"):
+        try:
+            j = http(url, tries=2)
+        except Exception as e:
+            why.append(type(e).__name__); continue
+        out = {}
+        def walk(x):
+            if isinstance(x, dict):
+                t = x.get("team")
+                if isinstance(t, dict) and isinstance(x.get("stats"), list):
+                    st = {z.get("name"): z.get("value") for z in x["stats"] if isinstance(z, dict)}
+                    names.update(k for k in st if k)
+                    gp = st.get("gamesPlayed")
+                    pf, pa = st.get("avgPointsFor"), st.get("avgPointsAgainst")
+                    if pf is None and gp and st.get("pointsFor") is not None: pf = st["pointsFor"] / gp
+                    if pa is None and gp and st.get("pointsAgainst") is not None: pa = st["pointsAgainst"] / gp
+                    ab = t.get("abbreviation")
+                    if ab and pf and pa: out[ALIAS.get(ab, ab)] = [round(float(pf), 1), round(float(pa), 1)]
+                for v in x.values(): walk(v)
+            elif isinstance(x, list):
+                for v in x: walk(v)
+        walk(j)
+        if len(out) >= 28: return out, "ok"
+        why.append(f"{len(out)} equipos")
+    if names: why.append("stats: " + ",".join(sorted(names))[:240])
+    return {}, " | ".join(why)
+
 def ntfy(title, msg, prio="default"):
     topic = os.environ.get("NTFY_TOPIC", "").strip()
     if not topic: return
@@ -142,6 +174,16 @@ def main():
     pdc = state.get("pd", {})                      # cache de dias ya cerrados: {periodo: {equipo: {id: pts}}}
     pdc = {k: v for k, v in pdc.items() if int(k) >= c0}
     dbg = {"hoy_ok": [], "hoy_mal": {}, "dias_ok": [], "dias_mal": {}}
+    # fuerza de los equipos para el ajuste por rival: se renueva cada 6 h; si falla, reintenta cada 30 min y no rompe nada
+    tm = state.get("tm") or {}
+    if (not tm.get("d") and time.time() - tm.get("try", 0) > 1800) or time.time() - tm.get("t", 0) > 6 * 3600:
+        tm["try"] = time.time()
+        try: got, why = team_env()
+        except Exception as e: got, why = {}, type(e).__name__
+        if got: tm["d"], tm["t"] = got, time.time()
+        tm["why"] = why
+    state["tm"] = tm
+    dbg["tm"] = [len(tm.get("d") or {}), tm.get("why")]
     pdt = {tid: {} for tid in live}                # {equipo: {"MM-DD": {id: pts}}}
     today_k = key(sp_date(sp))
     for tid, rc in rcs.items():
@@ -293,7 +335,7 @@ def main():
     out = {"u": now.isoformat(timespec="minutes"), "sp": sp, "mu": mu,
            "muD": f"{sp_date(c0).day}-{sp_date(c1).day} {MESES[sp_date(c1).month - 1]}", "me": ME,
            "cur": cur, "nxt": nxt, "spd": spd, "teams": teams, "fa": [x[1] for x in fas], "sched": sched, "gold": gold,
-           "gs": gs, "gsd": today_k, "fs": extra, "dbg": dbg}
+           "gs": gs, "gsd": today_k, "fs": extra, "tm": tm.get("d") or {}, "dbg": dbg}
     with open("data.json", "w", encoding="utf-8") as f: json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
     # avisos de minas de oro (solo las nuevas)
     seen = state.get("gold", {}); nowts = int(time.time())

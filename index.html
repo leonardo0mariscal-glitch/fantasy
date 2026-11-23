@@ -106,7 +106,7 @@ table.wk .lk{text-decoration:line-through;color:var(--mut)}
 #sheet.open{display:block}
 @media (prefers-reduced-motion:no-preference){#sheet.open .wrap{animation:shin .22s ease-out}@keyframes shin{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}}
 .shbar{display:flex;align-items:center;gap:12px}
-ul.why{margin:8px 0 0;padding-left:18px;font-size:14px}ul.why li{margin:0 0 7px}
+ul.why,ol.why{margin:8px 0 0;padding-left:20px;font-size:14px}ul.why li,ol.why li{margin:0 0 8px}
 .chip.auto{border-style:dashed}
 .chip.sm{font-size:12px;padding:5px 11px}
 .sbox{width:100%;box-sizing:border-box;font:500 16px var(--body);padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.82);color:var(--text);outline:none;-webkit-appearance:none;appearance:none}
@@ -349,18 +349,133 @@ function header(){
    <div class="note" style="margin-top:8px">Última lectura de ESPN ${ageText()}.${old?' <b style="color:var(--warn)">Desactualizados:</b> el robot no ha corrido.':''}${st.refMsg?' '+esc(st.refMsg):''}</div></div>`;
 }
 
+/* ---------- ajuste chico por rival (máx ±4%): lo que permite el rival y el ritmo del juego, con datos de ESPN ---------- */
+function tmLg(){const T=S.tm;if(!T)return 0;if(T._lg)return T._lg;const v=Object.values(T).filter(Array.isArray).map(x=>x[0]);return T._lg=v.length?v.reduce((a,b)=>a+b,0)/v.length:0}
+function mf(p,day){
+  const T=S.tm,lg=tmLg(); if(!T||!lg)return 1;
+  const g=game(p.t,day); if(!g)return 1;
+  const a=T[p.t], b=T[g.opp.replace(/^(vs |@)/,'')]; if(!Array.isArray(a)||!Array.isArray(b))return 1;
+  return Math.max(0.96,Math.min(1.04,1+0.5*(b[1]/lg-1)+0.3*((b[0]+b[1])/(a[0]+a[1])-1)));
+}
+/* ---------- alineación de un día con candados ----------
+   Como bestDay, pero: los titulares que ya empezaron no se mueven y los de banca que ya empezaron no suben;
+   se puede forzar (force) o vetar (exclude) a jugadores; y entre alineaciones igual de buenas prefiere la que mueve menos gente (stay). */
+function planDay(R,day,o){
+  o=o||{}; const today=day===todayKey(), ex=o.exclude||new Set(), fo=o.force||new Set();
+  const used=SLOTS.map(()=>false), fixed=[], pool=[];
+  for(const p of R){
+    if(p.slot==='IR'||p.slot==='BE')continue;
+    const g=game(p.t,day); if(!g||!today||!started(day,g.time))continue;
+    const i=SLOTS.findIndex((s,k)=>s[0]===p.slot&&!used[k]);
+    if(i>=0){used[i]=true;fixed.push({p,slot:p.slot,v:p.e*avail(p)*mf(p,day),locked:true})}
+  }
+  const fx=new Set(fixed.map(x=>x.p.n));
+  for(const p of R){
+    if(p.slot==='IR'||fx.has(p.n)||ex.has(p.n))continue;
+    const g=game(p.t,day); if(!g)continue;
+    if(today&&started(day,g.time))continue;
+    if(p.from&&day<p.from)continue;
+    const v=p.e*avail(p)*mf(p,day); if(v<=0)continue;
+    pool.push({p,v,sl:slotsFor(p).filter(i=>!used[i])});
+  }
+  const M=1<<SLOTS.length; let dp=new Float64Array(M).fill(-1); dp[0]=0; const ch=[];
+  for(const x of pool){
+    const nd=dp.slice(), cc=new Int16Array(M).fill(-2), bon=fo.has(x.p.n)?1000:0;
+    for(let m=0;m<M;m++){ if(dp[m]<0)continue;
+      for(const s of x.sl){ if(m&(1<<s))continue; const nm=m|(1<<s), v=dp[m]+x.v+bon+((o.stay&&x.p.slot===SLOTS[s][0])?0.01:0); if(v>nd[nm]){nd[nm]=v;cc[nm]=s;} } }
+    ch.push(cc); dp=nd;
+  }
+  let bm=0,bv=0; for(let m=0;m<M;m++) if(dp[m]>bv){bv=dp[m];bm=m;}
+  const assign=[...fixed]; let m=bm;
+  for(let i=pool.length-1;i>=0;i--){ const s=ch[i][m]; if(s>=0){assign.push({p:pool[i].p,slot:SLOTS[s][0],v:pool[i].v}); m^=1<<s;} }
+  return {tot:assign.reduce((a,x)=>a+x.v,0),assign,cands:pool.length+fixed.length};
+}
+/* qué cambiar en tu alineación de un día: quién sube, quién pasa de espacio, a quién sentar y por quién */
+function lineupPlan(R,day){
+  const today=day===todayKey(), g=p=>game(p.t,day);
+  const val=p=>g(p)?p.e*avail(p)*mf(p,day):0, plays=p=>!!g(p)&&avail(p)>0;
+  const lock=p=>!!(today&&g(p)&&started(day,g(p).time));
+  const starters=R.filter(p=>p.slot!=='BE'&&p.slot!=='IR');
+  const curTot=starters.reduce((a,p)=>a+val(p),0);
+  const opt=planDay(R,day,{stay:true}), to=new Map(opt.assign.map(a=>[a.p.n,a.slot]));
+  const occ={},cnt={}; starters.forEach(p=>{occ[p.slot]=(occ[p.slot]||0)+1}); SLOTS.forEach(s=>{cnt[s[0]]=(cnt[s[0]]||0)+1});
+  const empty=[]; for(const k in cnt)for(let i=occ[k]||0;i<cnt[k];i++)empty.push(k);
+  const ups=[],shifts=[],sits=[],frees=[],idle=[];
+  for(const p of R){
+    if(p.slot==='IR')continue;
+    const isS=p.slot!=='BE', t=to.get(p.n);
+    if(!isS){ if(t&&!lock(p))ups.push({p,to:t,v:val(p)}); else if(!t&&plays(p)&&!lock(p))idle.push({p,v:val(p)}); }
+    else if(t&&t!==p.slot)shifts.push({p,from:p.slot,to:t,v:val(p)});
+    else if(!t&&!lock(p))(plays(p)?sits:frees).push({p,v:val(p),from:p.slot});
+  }
+  /* ¿por quién sentar? lo que cuesta sentar a cada titular para poder meter a b */
+  const sitOptions=b=>{
+    const T0=planDay(R,day,{force:new Set([b.n])}).tot, o=[];
+    for(const s of starters){ if(lock(s)||s.n===b.n)continue;
+      const T=planDay(R,day,{force:new Set([b.n]),exclude:new Set([s.n])}).tot;
+      o.push({p:s,loss:Math.max(0,T0-T),v:val(s),plays:plays(s)}); }
+    return o.sort((a,c)=>a.loss-c.loss||a.v-c.v);
+  };
+  const free=SLOTS.length-opt.assign.length;
+  return {curTot,optTot:opt.tot,gain:opt.tot-curTot,opt,to,empty,ups,shifts,sits,frees,idle,free,sitOptions,lock,val,plays};
+}
+
+/* tarjeta "Cambios de alineación": movimientos exactos, a quién sentar y por qué */
+function lineupCard(R,day,P){
+  const when=day===todayKey()?'hoy':'ese día';
+  const info=p=>{const g=game(p.t,day),m=mf(p,day);return esc(g.opp)+' '+tm12(g.time)+(p.mn!=null?' · '+f0(p.mn)+' min':'')+(m>=1.02?' · rival que permite puntos':m<=0.98?' · rival cerrado':'')+(p.inj==='DTD'?' · dudoso':'')};
+  const nm=p=>`<b>${esc(p.n)}</b>`, steps=[];
+  const reused=s=>P.ups.some(u=>u.to===s)||P.shifts.some(h=>h.to===s);
+  for(const x of P.frees)if(reused(x.from))steps.push(`Saca de la alineación a ${nm(x.p)} (${x.p.inj==='O'||x.p.inj==='SUS'||x.p.inj==='IR'?'está fuera':when+' no juega'}) para liberar su espacio ${x.from}.`);
+  for(const x of P.sits)steps.push(`Sienta a ${nm(x.p)} (sale de ${x.from}): sí juega, ≈${f0(x.v)} pts, pero es de los que menos cuesta dejar fuera. <span class="mut">${info(x.p)}</span>`);
+  for(const x of P.shifts)steps.push(`Pasa a ${nm(x.p)} de ${x.from} a ${x.to}: así libera el espacio ${x.from}. <span class="mut">≈${f0(x.v)} pts</span>`);
+  for(const x of [...P.ups].sort((a,b)=>b.v-a.v))steps.push(`Sube a ${nm(x.p)} de la banca a ${x.to}: ≈${f0(x.v)} pts. <span class="mut">${info(x.p)}</span>`);
+  const moved=steps.length>0&&P.gain>=0.4;
+  let head;
+  if(moved){
+    head=`Con estos cambios pasas de ≈${f0(P.curTot)} a ≈${f0(P.optTot)} pts esperados (+${f0(P.gain)}).`;
+    if(!P.sits.length)head+=P.empty.length?` No hace falta sentar a nadie: tu espacio ${P.empty.join(' y ')} está vacío y se llena moviendo a quien ya tienes.`:` No hace falta sentar a nadie: los lugares los dejan jugadores que ${when} no juegan o están fuera.`;
+  } else head=`Tu alineación actual ya es la mejor que veo para este día: ≈${f0(P.curTot)} pts esperados.`;
+  const minIn=Math.min(...P.opt.assign.map(a=>a.v));
+  const idle=P.idle.map(x=>`<li>${nm(x.p)} se queda en la banca aunque juega (≈${f0(x.v)} pts): los espacios donde puede jugar los ocupan jugadores que rinden más ${when}; el último que entra rinde ≈${f0(minIn)}.</li>`).join('');
+  const lockd=P.opt.assign.filter(a=>a.locked).map(a=>a.p.n);
+  const b=[...P.ups].sort((a,c)=>c.v-a.v)[0];
+  let opts='';
+  if(P.sits.length&&b){
+    const o=P.sitOptions(b.p).slice(0,4);
+    opts=`<div class="note" style="margin:12px 0 4px"><b>¿A quién sientas para meter a ${esc(b.p.n)}?</b> Lo que pierdes sentando a cada uno, con tus posiciones en cuenta:</div>`+o.map((x,i)=>`<div class="item"><div class="grow"><div class="nm">${esc(x.p.n)} ${i===0?'<span class="pill good">Mejor opción</span>':''}</div><div class="meta">${x.plays?'juega · '+info(x.p):when+' no juega'}</div></div><div class="val">${x.loss<0.05?'sin costo':'−'+f1(x.loss)}</div></div>`).join('');
+  }
+  const emptyNote=P.free>0?`<div class="note" style="margin-top:8px">Te quedan ${P.free} ${P.free===1?'espacio':'espacios'} sin jugador que juegue ${when}. Un agente libre que juegue ${when} en esa posición te suma puntos: mira Agentes.</div>`:'';
+  return `<div class="glass card"><h3>Cambios de alineación</h3>
+    <div class="note" style="margin:6px 0 4px">${head}</div>
+    ${moved?`<ol class="why">${steps.map(x=>`<li>${x}</li>`).join('')}</ol>`:''}
+    ${idle?`<ul class="why">${idle}</ul>`:''}${opts}${emptyNote}
+    ${lockd.length?`<div class="note" style="margin-top:8px">Ya empezaron y no se pueden mover: ${lockd.map(esc).join(', ')}.</div>`:''}
+    <div class="note" style="margin-top:8px">Cuenta partidos, posición, minutos y riesgo de lesión${tmLg()?', y un ajuste chico por rival (máx. 4%)':'. Todavía no tengo datos de los rivales, así que no los cuento'}. Mover la alineación no gasta tus 7 movimientos.</div></div>`;
+}
+
 function dayView(){
   const D=days(), day=D[st.di], me=team(S.me), R=roster(me);
-  const opt=bestDay(R,day,false), optSet=new Map(opt.assign.map(a=>[a.p.n,a.slot]));
+  const P=day>=todayKey()?lineupPlan(R,day):null;
   const cur=R.filter(p=>p.slot!=='BE'&&p.slot!=='IR');
   let curTot=0,curN=0; for(const p of cur){ if(game(p.t,day)){curTot+=p.e*avail(p);curN++;} }
-  const ups=R.filter(p=>(p.slot==='BE'||p.slot==='IR')&&optSet.has(p.n)).map(p=>p.n);
-  const downs=cur.filter(p=>!optSet.has(p.n)&&ups.length).map(p=>p.n).slice(0,ups.length+1);
-  const rows=[...R].sort((a,b)=>ORDER.indexOf(a.slot)-ORDER.indexOf(b.slot)).map(p=>{
-    const g=game(p.t,day), isStart=p.slot!=='BE'&&p.slot!=='IR', lock=g&&started(day,g.time);
+  const real=[...R].sort((a,b)=>ORDER.indexOf(a.slot)-ORDER.indexOf(b.slot));
+  const all=[...real,...(P?P.empty.map(k=>({empty:true,slot:k})):[])].sort((a,b)=>ORDER.indexOf(a.slot)-ORDER.indexOf(b.slot));
+  const rows=all.map(p=>{
+    if(p.empty){
+      const who=P?[...P.ups,...P.shifts].filter(x=>x.to===p.slot).map(x=>x.p.n):[];
+      return `<div class="item dim"><div class="slot ${p.slot}">${p.slot}</div><div class="av sm">–</div><div class="grow"><div class="nm">Espacio vacío</div>
+      <div class="meta">${who.length?'Lo cubre '+esc(who[0])+' en el plan de abajo':'Nadie de tu roster puede ocuparlo hoy'}</div></div><div class="val"><span class="mut">–</span></div></div>`;
+    }
+    const g=game(p.t,day), lock=g&&started(day,g.time);
     let tag='';
-    if(g&&!lock&&isStart&&!optSet.has(p.n)&&ups.length) tag='<span class="pill amber">Mejor en banca</span>';
-    if(g&&!lock&&!isStart&&optSet.has(p.n)) tag='<span class="pill good">Mejor titular</span>';
+    if(P&&!lock){
+      const up=P.ups.find(x=>x.p.n===p.n), sh=P.shifts.find(x=>x.p.n===p.n);
+      if(up) tag=`<span class="pill good">Sube a ${up.to}</span>`;
+      else if(sh) tag=`<span class="pill">Pasa a ${sh.to}</span>`;
+      else if(P.sits.some(x=>x.p.n===p.n)) tag='<span class="pill amber">Siéntalo</span>';
+      else if(P.idle.some(x=>x.p.n===p.n)) tag='<span class="pill amber">No cabe hoy</span>';
+    }
     const q=gameState(p,day,g), act=dayPts(me,day,p.id), none='<span class="mut">–</span>';
     let vh;
     if(q.s==='none') vh=none;
@@ -375,10 +490,11 @@ function dayView(){
     return `<div class="item tap" data-pl="${esc(p.n)}"><div class="slot ${p.slot}">${p.slot}</div>${av(p)}<div class="grow"><div class="nm">${esc(p.n)} ${badge(p.inj)}</div>
       <div class="meta">${p.t} · ${p.pos} · ${g?esc(g.opp)+' '+tm12(g.time)+est:'sin partido'} ${tag}</div></div>
       <div class="val">${vh}</div></div>`}).join('');
-  const sw=ups.length?`<div class="note" style="margin-top:8px"><b>Sube:</b> ${ups.map(esc).join(', ')} · <b>baja:</b> ${downs.map(esc).join(', ')||'–'}. Esperado ${f0(opt.tot)} vs ${f0(curTot)} con tu alineación actual.</div>`:`<div class="note" style="margin-top:8px">Tu alineación actual ya es la mejor que veo para este día: esperado ${f0(curTot)} pts con ${curN} titulares jugando.</div>`;
+  const sw=P?(P.gain>=0.4?`<div class="note" style="margin-top:8px">Con la mejor alineación esperas ≈${f0(P.optTot)} pts (+${f0(P.gain)} contra la actual). Los cambios están abajo.</div>`:`<div class="note" style="margin-top:8px">Tu alineación actual ya es la mejor que veo para este día: ≈${f0(P.curTot)} pts esperados con ${curN} titulares jugando.</div>`):`<div class="note" style="margin-top:8px">Día ya jugado.</div>`;
   return `<div class="glass card"><div class="dayhead"><button class="arrow" id="prev" aria-label="Día anterior" ${st.di===0?'disabled':''}>‹</button>
     <div style="text-align:center"><h2>${dl(day)}</h2><div class="note">${(S.sched[day]||[]).length} partidos NBA${day===todayKey()?' · hoy':''}</div></div>
     <button class="arrow" id="next" aria-label="Día siguiente" ${st.di===D.length-1?'disabled':''}>›</button></div>${sw}</div>
+    ${P?lineupCard(R,day,P):''}
     <div class="glass card"><h3>Roster</h3>
     <div class="chips" style="margin-top:8px"><button class="chip sm ${st.rmode==='live'?'on':''}" data-rm="live">Live</button><button class="chip sm ${st.rmode==='exp'?'on':''}" data-rm="exp">Puntos esperados</button></div>
     <div class="note" style="margin-top:6px">${st.rmode==='live'?(team(S.me).pd?'Puntos reales de ESPN de este día. Un guión es que aún no juega (o no tiene partido).':'Aún no llegan los puntos en vivo: el robot los empieza a leer en su próxima vuelta.'):'Lo que se espera que termine cada uno. En partidos en curso se corrige con lo que ya lleva.'}</div>
