@@ -174,7 +174,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',trs:'',tro:{f:0,g:[],q:[]}};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',trs:'',tos:'o',toj:{d:'q',f:0,q:[],g:[],m:'w',pf:0},tro:{f:0,g:[],q:[]}};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -1401,9 +1401,44 @@ function trCounterRes(fid,base,variants){
   return diversify(rs.map(x=>({...x,G:x.r.G,Q:x.r.Q})),3,x=>x.G,x=>x.Q,2);
 }
 
+/* búsqueda por jugador: dir 'q' = me ofrecen a ... (fixed = jugadores del amigo fid) y busco qué darle de mi roster;
+   dir 'g' = yo doy a ... (fixed = mis jugadores) y busco qué me pueden ofrecer (de fid, o de cualquiera si fid=0) */
+function trFind(dir,fid,fixed,mode){
+  const C=trCache(),k=dir+'|'+fid+'|'+fixed.join(',')+'|'+mode+'|'+(mode==='d'?(st.trd||'m'):'');
+  C.fnd=C.fnd||{};if(C.fnd[k])return C.fnd[k];
+  const A=trTeam(S.me),H=trHor(),tol=mode==='d'?TR_TOL[st.trd||'m']:0.93,pre=[];let best=0;
+  const fids=dir==='q'?[fid]:(fid?[fid]:S.teams.filter(t=>t.id!==S.me).map(t=>t.id));
+  for(const f of fids){
+    const B=trTeam(f),P=trPair(f),opp=trOpp(f),fx=fixed.map(n=>(dir==='q'?B:A).by[n]);
+    if(!fx.length||fx.some(x=>!x))continue;
+    const subs=dir==='q'?trSubsets(A.E.filter(e=>!st.prot.has(e.n))):trSubsets(B.E),cand=[];
+    for(const s of subs){
+      const G=dir==='q'?s:fx,Q=dir==='q'?fx:s,rho=trRho(G,Q);
+      if(rho.min>best)best=rho.min;
+      if(rho.min<0.88)continue;
+      const p=trProx(A,B,P,G,Q),pa=pAcc(accLv(rho.min,G.some(g=>g.out)),p.frL);
+      const g=mode==='w'?p.myW-(opp?p.frW:0):mode==='l'?p.myL:(p.myW*H.wkK+p.myL)/2;
+      cand.push({G:G.map(e=>e.n),Q:Q.map(e=>e.n),s:g>=0?g*pa:g});
+    }
+    cand.sort((a,b)=>b.s-a.s);
+    for(const c of cand.slice(0,16))pre.push({f,G:c.G,Q:c.Q});
+  }
+  const L=[];
+  for(const c of pre){
+    const r=trEval(c.f,c.G,c.Q);
+    if(r.bad||r.rho.min<tol)continue;
+    if(mode==='d'&&r.flags.some(x=>x.k==='inj'))continue;
+    const g=mode==='w'?r.gW-(r.opp?r.fW:0):mode==='l'?r.gL:r.comb;
+    L.push({r,g,s:g>=0?g*r.pAcc:g});
+  }
+  L.sort((a,b)=>b.s-a.s);
+  const out=diversify(L,8,x=>dir==='q'?x.r.G:[],x=>dir==='g'?x.r.Q:[],2);
+  return C.fnd[k]={list:out.map(x=>({...x.r,score:x.s,gain:x.g})),n:pre.length,best};
+}
+
 
 /* ---------- pestaña Trades: pantalla ---------- */
-const trSg=x=>(x>=0?'+':'−')+f0(Math.abs(x));
+const trSg=x=>{const v=Math.round(x);return v===0?'0':(v>0?'+':'−')+Math.abs(v)};
 const trName=id=>tn(team(id));
 const trJoin=a=>a.map(n=>`<b>${esc(n)}</b>`).join(' + ');
 const trGames=(p,days)=>days.reduce((a,d)=>a+(game(p.t,d)?1:0),0);
@@ -1558,7 +1593,7 @@ function trVerdict(r){
   if(sl===0&&sw<0)return {t:'mid',h:`Te cuesta ${H.wkLab} (${f0(-r.gW)}) y a largo plazo queda igual.`,s:'No hay razón para aceptarla si no te llena una necesidad.'};
   return {t:'bad',h:'Recházala.',s:`Pierdes ${f0(-l)} pts por semana a largo plazo${sw<0?` y ${f0(-r.gW)} en ${H.wkLab}`:''}.`};
 }
-function offerView(){
+function offerMine(){
   const o=st.tro||(st.tro={f:0,g:[],q:[]}),A=trTeam(S.me);
   const frs=S.teams.filter(t=>t.id!==S.me);
   if(!o.f||!frs.some(t=>t.id===o.f))o.f=frs[0].id;
@@ -1592,23 +1627,79 @@ function offerView(){
     return `<div class="item"><div class="grow"><div class="note"><b>${esc(trName(s.f))}</b></div><div class="nm" style="font-weight:600">Das: ${s.g.map(esc).join(' + ')}</div><div class="nm" style="font-weight:600">Recibes: ${s.q.map(esc).join(' + ')}</div><div class="meta">${line}</div></div><div style="display:flex;flex-direction:column;gap:6px"><button class="chip" data-topen="${i}">Abrir</button><button class="chip" data-tdel="${i}">Borrar</button></div></div>`}).join('')}</div>`:'';
   return form.replace('@@BAR@@',bar)+res+list;
 }
+function offerView(){
+  const t=st.tos||'o';
+  const sub=`<div class="glass card"><div class="chips">${[['o','Mi oferta'],['j','Jugador']].map(([k,l])=>`<button class="chip ${t===k?'on':''}" data-tos="${k}">${l}</button>`).join('')}</div></div>`;
+  return sub+(t==='j'?trFindView():offerMine());
+}
 function trTap(d){                              // lo que hacen los botones de Trades; devuelve true si lo manejó
   if(d.trm){st.trm=d.trm;render();return true}
   if(d.trf!==undefined){st.trf=Number(d.trf)||0;render();return true}
   if(d.trd){st.trd=d.trd;render();return true}
+  if(d.tos){st.tos=d.tos;render();return true}
+  if(d.tjd||d.tjm||d.tjf||d.tjq||d.tjg||d.tjpf!==undefined){
+    const J=st.toj||(st.toj={d:'q',f:0,q:[],g:[],m:'w',pf:0});
+    if(d.tjd){J.d=d.tjd;J.q=[];J.g=[]}
+    else if(d.tjm)J.m=d.tjm;
+    else if(d.tjf){J.f=Number(d.tjf);J.q=[]}
+    else if(d.tjq)J.q=J.q.includes(d.tjq)?J.q.filter(x=>x!==d.tjq):[...J.q,d.tjq].slice(-2);
+    else if(d.tjg)J.g=J.g.includes(d.tjg)?J.g.filter(x=>x!==d.tjg):[...J.g,d.tjg].slice(-2);
+    else J.pf=Number(d.tjpf)||0;
+    render();return true}
   if(d.trs!==undefined){st.trs=d.trs;render();return true}
   if(d.trf2){st.tro={f:Number(d.trf2),g:[],q:[]};render();return true}
   if(d.og||d.oq){const o=st.tro,k=d.og?'g':'q',n=d.og||d.oq;o[k]=o[k].includes(n)?o[k].filter(x=>x!==n):[...o[k],n].slice(-2);render();return true}
   if(d.tsave){const a=trSaved(),o=st.tro;if(a.some(s=>s.key===d.tsave))return true;a.unshift({key:d.tsave,f:o.f,g:[...o.g],q:[...o.q]});trSaveList(a);render();return true}
   if(d.topen!==undefined){const s=trSaved()[Number(d.topen)];if(s){st.tro={f:s.f,g:[...s.g],q:[...s.q]};render();window.scrollTo(0,0)}return true}
   if(d.tdel!==undefined){const a=trSaved();a.splice(Number(d.tdel),1);trSaveList(a);render();return true}
-  if(d.tload){const key=d.tload,i=key.indexOf('|'),j=key.indexOf('>');st.tro={f:Number(key.slice(0,i)),g:key.slice(i+1,j).split(',').filter(Boolean),q:key.slice(j+1).split(',').filter(Boolean)};st.tab='trade';st.trm='o';
+  if(d.tload){const key=d.tload,i=key.indexOf('|'),j=key.indexOf('>');st.tro={f:Number(key.slice(0,i)),g:key.slice(i+1,j).split(',').filter(Boolean),q:key.slice(j+1).split(',').filter(Boolean)};st.tab='trade';st.trm='o';st.tos='o';
     if(st.sheet){st.sheetStack=[];st.sheet=null;renderSheet();try{if(history.state&&history.state.sheet)history.back()}catch(_){}}render();window.scrollTo(0,0);return true}
   if(d.tgo){const e=document.getElementById('trres');if(e)e.scrollIntoView({behavior:'smooth',block:'start'});return true}
   if(d.tcopy){const el=document.getElementById('trpitch');if(el){const t=el.textContent;try{navigator.clipboard.writeText(t).then(()=>{},()=>{})}catch(_){}
     try{const rg=document.createRange();rg.selectNodeContents(el);const s=window.getSelection();s.removeAllRanges();s.addRange(rg)}catch(_){}
     const b=document.querySelector('[data-tcopy]');if(b){b.textContent='Copiado (o mantén presionado el texto)';setTimeout(()=>{if(b)b.textContent='Copiar mensaje'},2500)}}return true}
   return false;
+}
+
+/* ---------- Mis ofertas · subtema "Jugador" ---------- */
+const TR_PRI=[['w','Esta semana'],['l','Largo plazo'],['d','Discreta']];
+function trFindView(){
+  const J=st.toj||(st.toj={d:'q',f:0,q:[],g:[],m:'w',pf:0});
+  const A=trTeam(S.me),frs=S.teams.filter(t=>t.id!==S.me);
+  if(!J.f||!frs.some(t=>t.id===J.f))J.f=frs[0].id;
+  if(J.pf&&!frs.some(t=>t.id===J.pf))J.pf=0;
+  const dir=J.d||'q',mode=J.m||'w',B=trTeam(J.f);
+  J.q=J.q.filter(n=>B.by[n]);J.g=J.g.filter(n=>A.by[n]);
+  const byE=T=>[...T.E].sort((a,b)=>b.l.e-a.l.e);
+  const tag=(e,mine)=>`${esc(e.n)}${mine&&st.prot.has(e.n)?' 🔒':''}${e.out?' · fuera':''}`;
+  const dch=[['q','Me ofrecen a…'],['g','Yo doy a…']].map(([k,l])=>`<button class="chip ${dir===k?'on':''}" data-tjd="${k}">${l}</button>`).join('');
+  const pch=TR_PRI.map(([k,l])=>`<button class="chip sm ${mode===k?'on':''}" data-tjm="${k}">${l}</button>`).join('');
+  const dsc=mode==='d'?`<div class="chips" style="margin-top:8px">${[['s','Muy discreta'],['m','Moderada'],['x','Máxima']].map(([k,l])=>`<button class="chip sm ${(st.trd||'m')===k?'on':''}" data-trd="${k}">${l}</button>`).join('')}</div>`:'';
+  let pick;
+  if(dir==='q')pick=`<div class="note" style="margin:12px 0 6px">Compañero que te lo ofrece</div><div class="chips sc">${frs.map(t=>`<button class="chip ${J.f===t.id?'on':''}" data-tjf="${t.id}">${esc(tn(t))}</button>`).join('')}</div>
+    <div class="note" style="margin:12px 0 6px"><b>Te ofrece a</b> (hasta 2)</div><div class="chips">${byE(B).map(e=>`<button class="chip sm ${J.q.includes(e.n)?'on':''}" data-tjq="${esc(e.n)}">${tag(e,false)}</button>`).join('')}</div>`;
+  else pick=`<div class="note" style="margin:12px 0 6px"><b>Tú das a</b> (hasta 2)</div><div class="chips">${byE(A).map(e=>`<button class="chip sm ${J.g.includes(e.n)?'on':''}" data-tjg="${esc(e.n)}">${tag(e,true)}</button>`).join('')}</div>
+    <div class="note" style="margin:12px 0 6px">Buscar con</div><div class="chips sc"><button class="chip ${!J.pf?'on':''}" data-tjpf="0">Todos</button>${frs.map(t=>`<button class="chip ${J.pf===t.id?'on':''}" data-tjpf="${t.id}">${esc(tn(t))}</button>`).join('')}</div>`;
+  const intro=dir==='q'
+    ?`Un amigo te dice “te doy a X, ¿qué me ofreces?”. Elige a X y busco qué darle de tu roster. No uso tus intocables 🔒 para dar.`
+    :`Tú dices “doy a X, ¿qué me ofrecen?”. Elige a uno o dos de tus jugadores y busco qué te pueden dar tus amigos a cambio.`;
+  const form=`<div class="glass card"><h3>Jugador</h3><div class="note" style="margin:6px 0 10px">${intro}</div><div class="chips">${dch}</div>
+    <div class="note" style="margin:12px 0 6px">Qué priorizar</div><div class="chips">${pch}</div>${dsc}${pick}</div>`;
+  const fixed=dir==='q'?J.q:J.g;
+  if(!fixed.length)return form+`<div class="glass card"><div class="note">Elige al menos un jugador para ver opciones.</div></div>`;
+  const R=trFind(dir,dir==='q'?J.f:J.pf,fixed,mode),L=R.list;
+  const E=TR_EPS,H=trHor();
+  let msg;
+  if(!L.length)msg=dir==='q'&&R.best<0.88
+    ?`Por nombre y promedio, ninguna combinación de tus jugadores (sin tus intocables 🔒) iguala el valor de ${fixed.map(esc).join(' + ')}: la más cercana se ve al ${Math.floor(R.best*100)}% de lo que él pide. Para cerrarlo tendrías que ofrecer a uno de tus intocables; pruébalo en “Mi oferta”.`
+    :`No encontré nada que a tu amigo le parezca razonable con ${fixed.map(esc).join(' + ')}${mode==='d'?'. Prueba con la discreción “Máxima” o con otra prioridad.':'. Prueba con otra prioridad o con otro jugador.'}`;
+  else{
+    const top=L[0].gain,pri=mode==='w'?H.wkLab:mode==='l'?'largo plazo':'semana normal';
+    msg=top>=E?`Estas son las mejores opciones para ti en ${pri}, ordenadas por lo que ganas multiplicado por la chance de que acepte.`
+      :`<b>Ninguna opción te suma de forma clara en ${pri}</b> (la mejor te da ${trSg(top)} pts). Las muestro igual por si necesitas cerrar el trato; revisa el desglose.`;
+  }
+  const head=dir==='q'?`Qué darle a ${esc(trName(J.f))} por ${fixed.map(esc).join(' + ')}`:`Qué te ofrecen por ${fixed.map(esc).join(' + ')}`;
+  return form+`<div class="glass card"><h3>Opciones</h3><div class="note" style="margin:6px 0 4px"><b>${head}</b></div><div class="note" style="margin:0 0 4px">${msg}${L.length?` Toca una para ver el desglose. Revisé ${R.n} combinaciones finalistas.`:''}</div>${L.map(r=>trRow(r,mode)).join('')}</div>`;
 }
 
 /*TR-END*/
