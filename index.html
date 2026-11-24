@@ -174,7 +174,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',trs:'',tos:'o',toj:{d:'q',f:0,q:[],g:[],m:'w',pf:0},tro:{f:0,g:[],q:[]}};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',trs:'',trp:'1',tos:'o',toj:{d:'q',f:0,q:[],g:[],m:'w',pf:0},tro:{f:0,g:[],q:[]}};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -834,7 +834,7 @@ function ligaView(){
   const labs={};Object.keys(me.by).sort((a,b)=>a-b).forEach(k=>{if(S.spd&&S.spd[k])labs[k]=S.spd[k]});
   const strip=Object.keys(labs).map(sp=>{const a=me.by[sp]||0,b=lead.by[sp]||0;return `<div style="flex:1;text-align:center"><div class="note">${dl(labs[sp]).slice(0,3)}</div><div class="num" style="font-weight:700">${a}</div><div class="num mut">${b}</div></div>`}).join('')+
     `<div style="flex:1;text-align:center"><div class="note">Hoy</div><div class="num" style="font-weight:700">${me.live}</div><div class="num mut">${lead.live}</div></div>`;
-  return `<div class="glass card"><h3>Marcador de la semana</h3><div class="row">${strip}</div><div class="note" style="margin-top:6px">Fila de arriba: tú. Abajo: ${esc(tn(lead))}.</div></div>${rows}`;
+  return trPendCard(false)+`<div class="glass card"><h3>Marcador de la semana</h3><div class="row">${strip}</div><div class="note" style="margin-top:6px">Fila de arriba: tú. Abajo: ${esc(tn(lead))}.</div></div>${rows}`;
 }
 
 function agentsView(){
@@ -1146,10 +1146,38 @@ const TR_EPS=8;                            // pts por semana: por debajo de esto
 const TR_PER=9, TR_KEEP=30;
 const TR_ACC=['Baja','Media','Buena','Alta'];
 let _tc=null;
+/* trades que ESPN ya aceptó pero tiene en revisión (todavía no mueven jugadores): se leen del robot (S.pt) */
+let _trPS=null,_trPT=null,_trPC=null;
+function trPend(){
+  if(_trPC&&_trPS===S&&_trPT===S.pt)return _trPC;
+  const ids={},seen=new Set(),acc=[],prop=[];
+  for(const t of S.teams)for(const a of t.r)ids[String(a[12])]={a,tid:t.id};
+  for(const x of (S.pt||[])){
+    if(!x||x.st!=='PENDING'||seen.has(x.i)||!Array.isArray(x.it))continue;
+    const mv=[];let ok=true;
+    for(const it of x.it){const o=ids[String(it[0])];if(!o||o.tid!==it[1]){ok=false;break}mv.push({id:String(it[0]),n:o.a[0],fr:it[1],to:it[2],row:o.a})}
+    if(!ok||!mv.length)continue;               // ya se ejecutó o no lo reconozco
+    const ty=String(x.ty||'');
+    if(ty==='TRADE_ACCEPT'){seen.add(x.i);acc.push({i:x.i,pd:x.pd,pr:x.pr,mv})}
+    else if(ty==='TRADE_PROPOSAL'){seen.add(x.i);prop.push({i:x.i,pd:x.pd,pr:x.pr,mv})}
+  }
+  _trPS=S;_trPT=S.pt;return _trPC={acc,prop};
+}
+function trRows(t){                              // roster tal como quedaría con los trades aceptados (si el interruptor está encendido)
+  if(st.trp==='0')return t.r;
+  const P=trPend();if(!P.acc.length)return t.r;
+  let rows=t.r;
+  for(const x of P.acc){
+    const out=new Set(x.mv.filter(m=>m.fr===t.id).map(m=>m.id)),inn=x.mv.filter(m=>m.to===t.id);
+    if(!out.size&&!inn.length)continue;
+    rows=rows.filter(a=>!out.has(String(a[12]))).concat(inn.map(m=>{const r=m.row.slice();r[2]='BE';return r}));
+  }
+  return rows;
+}
 function trSig(){
   const r=S.teams.map(t=>t.r.map(a=>a[0]+a[2]+a[3]+a[6]).join(',')).join(';');
   const g=Object.keys(S.sched).sort().map(d=>d+(S.sched[d]||[]).length).join(',');
-  return [st.dtd,[...st.prot].sort().join(','),todayKey(),S.mu,r,g,(S.fa[0]||[])[0],S.rs||'',S.ir==null?'':S.ir,JSON.stringify(S.op||'')].join('|');
+  return [st.dtd,[...st.prot].sort().join(','),todayKey(),S.mu,r,g,(S.fa[0]||[])[0],S.rs||'',S.ir==null?'':S.ir,JSON.stringify(S.op||''),st.trp||'1',JSON.stringify((S.pt||[]).map(x=>[x.i,x.st,x.ty,x.pd]))].join('|');
 }
 let _tcT=0;
 const trTouch=()=>{_tcT=0};                  // se llama al dibujar: así los cambios de datos o de intocables se notan al momento
@@ -1195,7 +1223,7 @@ const nonIR=E=>{let n=0;for(const e of E)if(!e.ir)n++;return n};
 
 function trTeam(tid){
   const C=trCache();if(C.t[tid])return C.t[tid];
-  const E=roster(team(tid)).map(trEnt),T={id:tid,E,by:{},size:E.length,n0:nonIR(E)};
+  const E=roster({r:trRows(team(tid))}).map(trEnt),T={id:tid,E,by:{},size:E.length,n0:nonIR(E)};
   E.forEach(e=>T.by[e.n]=e);
   T.W=tvW(E);T.L=tvL(E);T.lossW={};T.lossL={};
   for(const e of E){const R=E.filter(x=>x!==e);T.lossW[e.n]=T.W-tvW(R);T.lossL[e.n]=T.L-tvL(R)}
@@ -1497,11 +1525,28 @@ const TR_EMPTY={
   d:`No encontré cambios que se vean parejos para tu amigo y que te convengan. Prueba con la discreción “Máxima” o con el modo Esta semana.`,
   p:`No encontré cambios donde los dos mejoren.`
 };
+function trWhen(ms){
+  if(!ms)return '';
+  try{return new Date(ms).toLocaleString('es-MX',{timeZone:'America/New_York',weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).replace(',','')+' (hora del este)'}catch(_){return ''}
+}
+const trSide=(mv,fr)=>mv.filter(m=>m.fr===fr).map(m=>m.n);
+function trPendLines(x){
+  const fids=[...new Set(x.mv.map(m=>m.fr))];
+  return fids.map(f=>`<b>${esc(trName(f))}</b> da ${trSide(x.mv,f).map(esc).join(' + ')}`).join(' · ');
+}
+function trPendCard(full){                        // aviso de trades en revisión; con interruptor solo en la pestaña Trades
+  const P=trPend();if(!P.acc.length&&!P.prop.length)return '';
+  const t=S.tr||{},on=st.trp!=='0';
+  const acc=P.acc.map(x=>`<div class="item"><div class="grow"><div class="nm" style="font-size:14.5px;font-weight:600">${trPendLines(x)}</div><div class="meta">Aceptado por los dos, en revisión.${x.pd?` ESPN lo ejecuta el ${esc(trWhen(x.pd))}.`:''}${t.veto?` Se cancela si ${t.veto} compañeros lo vetan.`:''}</div></div></div>`).join('');
+  const prop=P.prop.map(x=>`<div class="item"><div class="grow"><div class="nm" style="font-size:14.5px;font-weight:600">${trPendLines(x)}</div><div class="meta">Propuesto, todavía sin aceptar. No lo cuento.</div></div></div>`).join('');
+  const sw=full&&P.acc.length?`<div class="chips" style="margin-top:10px"><button class="chip sm ${on?'on':''}" data-trp="1">Contarlo como hecho</button><button class="chip sm ${on?'':'on'}" data-trp="0">Como está hoy en ESPN</button></div><div class="note" style="margin-top:8px">${on?'Los rosters de Trades ya incluyen este intercambio. Los demás apartados siguen mostrando lo que ESPN tiene hoy.':'Trades usa los rosters tal como están hoy en ESPN.'}</div>`:'';
+  return `<div class="glass card"><h3>${P.acc.length?'Intercambios en revisión':'Intercambios propuestos'}</h3><div class="note" style="margin:6px 0 4px">ESPN no mueve a los jugadores hasta que termina la revisión de la liga (${t.rev?t.rev+' h':'unas horas'}). Por eso el roster tarda en cambiar.</div>${acc}${prop}${sw}</div>`;
+}
 function tradesView(){
   trTouch();
   const mode=st.trm||'w',chips=TR_MODES.map(([k,l])=>`<button class="chip ${mode===k?'on':''}" data-trm="${k}">${l}</button>`).join('');
   const head=`<div class="glass card"><h3>Trades</h3><div class="note" style="margin:6px 0 10px">Intercambios con tus compañeros: 1 a 1, 1 a 2, 2 a 1 o 2 a 2. ${esc(trRules())}</div><div class="chips">${chips}</div></div>`;
-  if(mode==='o')return head+offerView();
+  if(mode==='o')return head+trPendCard(true)+offerView();
   const fr=`<button class="chip ${!st.trf?'on':''}" data-trf="0">Todos</button>`+S.teams.filter(t=>t.id!==S.me).map(t=>`<button class="chip ${st.trf===t.id?'on':''}" data-trf="${t.id}">${esc(tn(t))}</button>`).join('');
   const dsc=mode==='d'?`<div class="chips" style="margin-top:8px">${[['s','Muy discreta'],['m','Moderada'],['x','Máxima']].map(([k,l])=>`<button class="chip ${(st.trd||'m')===k?'on':''}" data-trd="${k}">${l}</button>`).join('')}</div>`:'';
   const fm=`<div class="note" style="margin:12px 0 6px">Formato: tú das X y recibes Y</div><div class="chips">${[['','Todos'],['11','1 a 1'],['12','1 a 2'],['21','2 a 1'],['22','2 a 2']].map(([k,l])=>`<button class="chip sm ${(st.trs||'')===k?'on':''}" data-trs="${k}">${l}</button>`).join('')}</div>`;
@@ -1510,13 +1555,13 @@ function tradesView(){
   if(!C.res[k]){
     if(job&&job.err)return head+top+`<div class="glass card"><div class="note">No pude calcular los intercambios (${esc(job.err)}). Recarga con ↻.</div></div>`;
     clearTimeout(window.__tr);window.__tr=setTimeout(()=>trRankAsync(mode,()=>{if(st.tab==='trade'&&(st.trm||'w')===mode)render()}),40);
-    return head+top+`<div class="glass card"><div class="note">Buscando intercambios con tus 5 compañeros… <span id="trpct">${job?Math.round((job.pct||0)*100)+'%':''}</span></div></div>`;
+    return head+trPendCard(true)+top+`<div class="glass card"><div class="note">Buscando intercambios con tus 5 compañeros… <span id="trpct">${job?Math.round((job.pct||0)*100)+'%':''}</span></div></div>`;
   }
   const R=C.res[k],list=R.list.filter(x=>!st.trf||x.fid===st.trf).slice(0,10);
   const fx=st.trs?(st.trs==='12'?' Recibir 2 jugadores por 1 casi nunca se le ve justo a tu amigo (te da más cuerpos y más talento) y tu roster está lleno, por eso salen pocos o ninguno.':` No hay propuestas con ese formato (${st.trs[0]} a ${st.trs[1]}).`)+' Prueba otro formato o “Todos”.':'';
   const body=list.length?list.map(r=>trRow(r,mode)).join(''):`<div class="note" style="padding:8px 0">${TR_EMPTY[mode]}${fx}</div>`;
   const loose=mode==='p'&&list.some(x=>x.loose)?`<div class="note" style="margin-top:8px">Hay pocos cambios donde los dos mejoran claramente; los últimos son “casi parejos”.</div>`:'';
-  return head+top+`<div class="glass card"><h3>Propuestas</h3><div class="note" style="margin:6px 0 4px">Toca una para ver el desglose. “Aceptación” es una estimación de cómo se ve en números, no de cómo piensa cada amigo. Revisé ${R.n} propuestas finalistas de miles de combinaciones. No cuenta lo que ya podrías ganar con agentes libres.</div>${body}${loose}</div>`;
+  return head+trPendCard(true)+top+`<div class="glass card"><h3>Propuestas</h3><div class="note" style="margin:6px 0 4px">Toca una para ver el desglose. “Aceptación” es una estimación de cómo se ve en números, no de cómo piensa cada amigo. Revisé ${R.n} propuestas finalistas de miles de combinaciones. No cuenta lo que ya podrías ganar con agentes libres.</div>${body}${loose}</div>`;
 }
 
 /* ---------- desglose de un intercambio (sirve para la hoja y para Mis ofertas) ---------- */
@@ -1637,6 +1682,7 @@ function trTap(d){                              // lo que hacen los botones de T
   if(d.trf!==undefined){st.trf=Number(d.trf)||0;render();return true}
   if(d.trd){st.trd=d.trd;render();return true}
   if(d.tos){st.tos=d.tos;render();return true}
+  if(d.trp!==undefined){st.trp=d.trp;render();return true}
   if(d.tjd||d.tjm||d.tjf||d.tjq||d.tjg||d.tjpf!==undefined){
     const J=st.toj||(st.toj={d:'q',f:0,q:[],g:[],m:'w',pf:0});
     if(d.tjd){J.d=d.tjd;J.q=[];J.g=[]}
