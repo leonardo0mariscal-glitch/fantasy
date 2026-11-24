@@ -175,6 +175,37 @@ def league_extra(d, mu):
     except Exception as e: print("op fallo", type(e).__name__)
     return x
 
+def pending_trades(ck, info):
+    """Intercambios recientes que ESPN tiene propuestos, aceptados o en revision (todavia no mueven jugadores)
+    y los ejecutados hace poco. Lee dos vistas; si cambian de forma, deja en `info` lo que vio para ajustarlo."""
+    found, now_ms = {}, time.time() * 1000
+    for name, url in (("pend", BASE + "?view=mPendingTransactions"), ("tx", BASE + "?view=mTransactions2")):
+        try:
+            j = http(url, ck, tries=2)
+        except Exception as e:
+            info[name] = type(e).__name__; continue
+        cnt, tops = {}, list(j.keys()) if isinstance(j, dict) else type(j).__name__
+        def walk(x):
+            if isinstance(x, dict):
+                ty = x.get("type")
+                if isinstance(ty, str) and isinstance(x.get("items"), list):
+                    k = f"{ty}/{x.get('status')}"; cnt[k] = cnt.get(k, 0) + 1
+                    if "TRADE" in ty.upper():
+                        its = [[i.get("playerId"), i.get("fromTeamId"), i.get("toTeamId")] for i in x["items"]
+                               if isinstance(i, dict) and i.get("playerId") is not None and "TRADE" in str(i.get("type", "TRADE")).upper()]
+                        pr = x.get("proposedDate") or x.get("processDate") or 0
+                        if its and (not pr or now_ms - pr < 10 * 86400e3):
+                            tid = str(x.get("id") or x.get("bidAmount") or len(found))
+                            found[name + tid] = {"i": tid, "ty": ty, "st": x.get("status"), "v": name, "pr": x.get("proposedDate"),
+                                                 "pd": x.get("processDate"), "tm": x.get("teamId"), "it": its}
+                for v in x.values(): walk(v)
+            elif isinstance(x, list):
+                for v in x: walk(v)
+        walk(j)
+        info[name] = {"top": tops, "tipos": cnt}
+    # una misma propuesta puede salir en las dos vistas: se dejan las dos (con su estado) hasta ver cual es mas fiable
+    return sorted(found.values(), key=lambda f: -(f["pr"] or f["pd"] or 0))[:16]
+
 def main():
     s2, swid = os.environ.get("ESPN_S2", ""), os.environ.get("ESPN_SWID", "")
     if not s2 or not swid:
@@ -378,6 +409,9 @@ def main():
            "gs": gs, "gsd": today_k, "fs": extra, "tm": tm.get("d") or {}, "dbg": dbg}
     try: out.update(league_extra(d, mu))
     except Exception as e: print("league_extra fallo", type(e).__name__)
+    try:
+        dbg["pt"] = {}; out["pt"] = pending_trades(ck, dbg["pt"])
+    except Exception as e: print("pending_trades fallo", type(e).__name__)
     with open("data.json", "w", encoding="utf-8") as f: json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
     # avisos de minas de oro (solo las nuevas)
     seen = state.get("gold", {}); nowts = int(time.time())
