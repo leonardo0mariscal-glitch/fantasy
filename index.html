@@ -74,6 +74,9 @@ h3{font-size:16px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{font:600 13px var(--body);padding:7px 12px;border-radius:99px;border:1px solid var(--line);background:rgba(255,255,255,.75);color:var(--text);cursor:pointer}
 .chip.on{background:#0c0c0e;color:#fff;border-color:#0c0c0e}
+.chips.sc{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+.chips.sc::-webkit-scrollbar{display:none}
+.chips.sc .chip{flex:0 0 auto}
 .bar{height:8px;border-radius:99px;background:rgba(0,0,0,.1);overflow:hidden}
 .bar>i{display:block;height:100%;background:linear-gradient(90deg,#a3a5ac,#5a5c63);border-radius:99px}
 .bar.me>i{background:linear-gradient(90deg,#2c2d32,#0c0c0e)}
@@ -106,7 +109,8 @@ table.wk .lk{text-decoration:line-through;color:var(--mut)}
 #sheet.open{display:block}
 @media (prefers-reduced-motion:no-preference){#sheet.open .wrap{animation:shin .22s ease-out}@keyframes shin{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}}
 .shbar{display:flex;align-items:center;gap:12px}
-ul.why,ol.why{margin:8px 0 0;padding-left:20px;font-size:14px}ul.why li,ol.why li{margin:0 0 8px}
+ul.why,ol.why{margin:8px 0 0;padding-left:20px;font-size:14px}
+.verdict{margin:12px 0 0;font-size:16px;line-height:1.35}ul.why li,ol.why li{margin:0 0 8px}
 .chip.auto{border-style:dashed}
 .chip.sm{font-size:12px;padding:5px 11px}
 .sbox{width:100%;box-sizing:border-box;font:500 16px var(--body);padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.82);color:var(--text);outline:none;-webkit-appearance:none;appearance:none}
@@ -167,7 +171,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l'};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -183,12 +187,17 @@ const todayKey=()=>{const p=etNow();return p.month+'-'+p.day}, nowT=()=>{const p
 const END=()=>S.cur.end, NS=()=>S.nxt.start, NE=()=>S.nxt.end;
 const rng=(a,b)=>{const [m1,d1]=a.split('-').map(Number),[m2,d2]=b.split('-').map(Number);return m1===m2?d1+'–'+d2+' '+MO[m1-1]:d1+' '+MO[m1-1]+' – '+d2+' '+MO[m2-1]};
 const started=(day,time)=>day===todayKey()&&time<=nowT();
-function game(team,day){
+let _gc=null,_gcS=null;
+function game(team,day){           // partido de un equipo ese día (con caché: se llama muchísimas veces)
+  if(_gcS!==S||!_gc){_gc=new Map();_gcS=S}
+  const k=team+'|'+day; if(_gc.has(k))return _gc.get(k);
+  let r=null;
   for(const g of (S.sched[day]||[])){
     const [m,tm]=g.split(' '); const [a,h]=m.split('@');
-    if(a===team) return {opp:'@'+h,time:tm};
-    if(h===team) return {opp:'vs '+a,time:tm};
-  } return null;
+    if(a===team){r={opp:'@'+h,time:tm};break}
+    if(h===team){r={opp:'vs '+a,time:tm};break}
+  }
+  _gc.set(k,r);return r;
 }
 /* ---------- puntos en vivo ---------- */
 const liveDay=()=>(S.spd&&S.sp!=null&&S.spd[String(S.sp)])||todayKey();
@@ -241,7 +250,8 @@ function mkP(a){const p={n:a[0],t:a[1],slot:a[2],inj:a[3],pos:a[4],s:a[5],gp:a[6
 function mkF(a){const p={n:a[0],t:a[1],slot:'FA',inj:a[2],pos:a[3],s:a[4],gp:a[5],l7:a[6],l15:a[7],l30:a[8],pr:a[9],mn:a[10],ws:a[11],own:a[12],id:a[13]};p.e=exp(p);return p}
 const team=id=>S.teams.find(t=>t.id===id);
 const roster=t=>t.r.map(mkP);
-const slotsFor=p=>{const ps=p.pos.split('/');const o=[];SLOTS.forEach((s,i)=>{if(s[1]===null||s[1].some(x=>ps.includes(x)))o.push(i)});return o};
+const _sfc={};
+const slotsFor=p=>{let o=_sfc[p.pos];if(o)return o;const ps=p.pos.split('/');o=[];SLOTS.forEach((s,i)=>{if(s[1]===null||s[1].some(x=>ps.includes(x)))o.push(i)});return _sfc[p.pos]=o};
 
 /* mejor alineación de un día: asigna jugadores a los 10 espacios maximizando puntos esperados */
 function bestDay(R,day,skipStarted){
@@ -360,6 +370,7 @@ function mf(p,day){
 /* ---------- alineación de un día con candados ----------
    Como bestDay, pero: los titulares que ya empezaron no se mueven y los de banca que ya empezaron no suben;
    se puede forzar (force) o vetar (exclude) a jugadores; y entre alineaciones igual de buenas prefiere la que mueve menos gente (stay). */
+let _dpA=null,_dpB=null,_chB=new Int8Array(0);
 function planDay(R,day,o){
   o=o||{}; const today=day===todayKey(), ex=o.exclude||new Set(), fo=o.force||new Set();
   const used=SLOTS.map(()=>false), fixed=[], pool=[];
@@ -378,16 +389,20 @@ function planDay(R,day,o){
     const v=p.e*avail(p)*mf(p,day); if(v<=0)continue;
     pool.push({p,v,sl:slotsFor(p).filter(i=>!used[i])});
   }
-  const M=1<<SLOTS.length; let dp=new Float64Array(M).fill(-1); dp[0]=0; const ch=[];
-  for(const x of pool){
-    const nd=dp.slice(), cc=new Int16Array(M).fill(-2), bon=fo.has(x.p.n)?1000:0;
+  const M=1<<SLOTS.length, n=pool.length;
+  if(!_dpA){_dpA=new Float64Array(M);_dpB=new Float64Array(M)}
+  if(_chB.length<n*M)_chB=new Int8Array(n*M);
+  let dp=_dpA, nd=_dpB; dp.fill(-1); dp[0]=0;
+  for(let i=0;i<n;i++){
+    const x=pool[i], bon=fo.has(x.p.n)?1000:0, base=i*M, sl=x.sl;
+    nd.set(dp); _chB.fill(-2,base,base+M);
     for(let m=0;m<M;m++){ if(dp[m]<0)continue;
-      for(const s of x.sl){ if(m&(1<<s))continue; const nm=m|(1<<s), v=dp[m]+x.v+bon+((o.stay&&x.p.slot===SLOTS[s][0])?0.01:0); if(v>nd[nm]){nd[nm]=v;cc[nm]=s;} } }
-    ch.push(cc); dp=nd;
+      for(let k=0;k<sl.length;k++){ const s=sl[k]; if(m&(1<<s))continue; const nm=m|(1<<s), v=dp[m]+x.v+bon+((o.stay&&x.p.slot===SLOTS[s][0])?0.01:0); if(v>nd[nm]){nd[nm]=v;_chB[base+nm]=s;} } }
+    const t=dp; dp=nd; nd=t;
   }
   let bm=0,bv=0; for(let m=0;m<M;m++) if(dp[m]>bv){bv=dp[m];bm=m;}
   const assign=[...fixed]; let m=bm;
-  for(let i=pool.length-1;i>=0;i--){ const s=ch[i][m]; if(s>=0){assign.push({p:pool[i].p,slot:SLOTS[s][0],v:pool[i].v}); m^=1<<s;} }
+  for(let i=n-1;i>=0;i--){ const s=_chB[i*M+m]; if(s>=0){assign.push({p:pool[i].p,slot:SLOTS[s][0],v:pool[i].v}); m^=1<<s;} }
   return {tot:assign.reduce((a,x)=>a+x.v,0),assign,cands:pool.length+fixed.length};
 }
 /* qué cambiar en tu alineación de un día: quién sube, quién pasa de espacio, a quién sentar y por quién */
@@ -445,13 +460,233 @@ function lineupCard(R,day,P){
     const o=P.sitOptions(b.p).slice(0,4);
     opts=`<div class="note" style="margin:12px 0 4px"><b>¿A quién sientas para meter a ${esc(b.p.n)}?</b> Lo que pierdes sentando a cada uno, con tus posiciones en cuenta:</div>`+o.map((x,i)=>`<div class="item"><div class="grow"><div class="nm">${esc(x.p.n)} ${i===0?'<span class="pill good">Mejor opción</span>':''}</div><div class="meta">${x.plays?'juega · '+info(x.p):when+' no juega'}</div></div><div class="val">${x.loss<0.05?'sin costo':'−'+f1(x.loss)}</div></div>`).join('');
   }
-  const emptyNote=P.free>0?`<div class="note" style="margin-top:8px">Te quedan ${P.free} ${P.free===1?'espacio':'espacios'} sin jugador que juegue ${when}. Un agente libre que juegue ${when} en esa posición te suma puntos: mira Agentes.</div>`:'';
+  const emptyNote=P.free>0?`<div class="note" style="margin-top:8px">Te quedan ${P.free} ${P.free===1?'espacio':'espacios'} sin jugador que juegue ${when}. Mira qué agentes juegan ese día y si conviene llenarlos: depende de a quién tendrías que soltar.</div><div style="margin-top:8px"><button class="chip" data-goad="${day}">Ver agentes de ese día</button></div>`:'';
   return `<div class="glass card"><h3>Cambios de alineación</h3>
     <div class="note" style="margin:6px 0 4px">${head}</div>
     ${moved?`<ol class="why">${steps.map(x=>`<li>${x}</li>`).join('')}</ol>`:''}
     ${idle?`<ul class="why">${idle}</ul>`:''}${opts}${emptyNote}
     ${lockd.length?`<div class="note" style="margin-top:8px">Ya empezaron y no se pueden mover: ${lockd.map(esc).join(', ')}.</div>`:''}
     <div class="note" style="margin-top:8px">Cuenta partidos, posición, minutos y riesgo de lesión${tmLg()?', y un ajuste chico por rival (máx. 4%)':'. Todavía no tengo datos de los rivales, así que no los cuento'}. Mover la alineación no gasta tus 7 movimientos.</div></div>`;
+}
+
+/* ---------- agentes libres por día: huecos de tu alineación, quién los llena y a quién soltar ---------- */
+let _fp=null,_fpS=null;
+function faPool(){          // los 45 de arriba y el resto de los libres, sin repetir
+  if(_fp&&_fpS===S)return _fp;
+  const seen=new Set(),out=[];
+  for(const a of [...S.fa,...(S.fs||[])]){if(seen.has(a[0]))continue;seen.add(a[0]);const p=mkF(a);p.owner=0;out.push(p)}
+  _fp=out;_fpS=S;return out;
+}
+const dsh=k=>{const [m,d]=k.split('-').map(Number);return WD[new Date(Date.UTC(2026,m-1,d)).getUTCDay()]+' '+d};
+const dayName=k=>k===todayKey()?'Hoy':dsh(k);
+const MOVES=7, MINNET=6;      // movimientos por semana · lo mínimo que debe dejar un movimiento para valer la pena
+const movesLeft=()=>Math.max(0,MOVES-(team(S.me).acq||0));
+function faGame(f,day){        // el partido con el que un agente libre te sirve ese día (si ya empezó o sigue en waivers, no te sirve)
+  const g=game(f.t,day); if(!g||started(day,g.time))return null;
+  if(f.ws==='W'&&day<NS())return null;
+  return avail(f)>0?g:null;
+}
+function dayFill(R,day){       // cuántos de tus 10 espacios quedan con jugador ese día, cuáles faltan y cuántos juegan pero no caben
+  const P=planDay(R,day), used={}; P.assign.forEach(a=>{used[a.slot]=(used[a.slot]||0)+1});
+  const seen={},empty=[]; SLOTS.forEach(([n])=>{seen[n]=(seen[n]||0)+1;if(seen[n]>(used[n]||0))empty.push(n)});
+  return {day,nba:(S.sched[day]||[]).length,filled:P.assign.length,tot:P.tot,empty,surplus:Math.max(0,P.cands-P.assign.length)};
+}
+/* agregar a f y soltar a d (o a nadie si tienes lugar libre): lo que cambia ese día y en total */
+function evalPair(R,f,d,D,hd,bt){
+  const R1=(d?R.filter(x=>x.n!==d.n):R.slice()); R1.push({...f,slot:'BE',from:f.ws==='W'?NS():null});
+  const rows=[]; let net=0,gD=0,starts=0;
+  for(const day of hd){
+    if(!game(f.t,day)&&!(d&&game(d.t,day)))continue;          // si ninguno de los dos juega, nada cambia
+    if(bt[day]==null)bt[day]=planDay(R,day).tot;
+    const P1=planDay(R1,day), diff=P1.tot-bt[day], sf=P1.assign.some(x=>x.p.n===f.n);
+    if(sf)starts++; rows.push({day,a:bt[day],b:P1.tot,diff,sf}); net+=diff; if(day===D)gD=diff;
+  }
+  return {f,d,gD,net,rows,starts,fe:f.e*avail(f)};
+}
+/* sueltables (ni protegidos ni IR) de menor a mayor costo: cuánto pierdes en el periodo si los sueltas sin meter a nadie */
+function dropOrder(R,AP,keep,ctx){
+  if(ctx.loss)return ctx.loss;
+  const ds=R.filter(p=>p.slot!=='IR'&&!st.prot.has(p.n)&&!AP.has(p.n)&&!keep.has(p.n)), hd=ctx.hd;
+  ctx.loss=ds.map(d=>{let l=0;const R1=R.filter(x=>x.n!==d.n);
+    for(const day of hd){if(!game(d.t,day))continue;if(ctx.bt[day]==null)ctx.bt[day]=planDay(R,day).tot;l+=ctx.bt[day]-planDay(R1,day).tot}
+    return {d,loss:l}}).sort((x,y)=>x.loss-y.loss);
+  return ctx.loss;
+}
+/* para cada agente, a quién soltarías: primero el mejor jugador sacrificable (rinde menos que lo que hay libre);
+   si no hay ninguno, el menos malo de los no protegidos, marcado sac:false solo para explicar por qué no conviene.
+   Solo prueba a los que menos cuesta soltar (y a los sacrificables más baratos) para no gastar de más. */
+function addEvals(R,D,fas,AP,keep,ctx){
+  const repl=replLevel(), open=R.filter(p=>p.slot!=='IR').length<13, hd=ctx.hd;
+  const better=(x,y)=>!x||y.net>x.net+0.05||(Math.abs(y.net-x.net)<=0.05&&y.d&&x.d&&y.d.e<x.d.e);
+  return fas.map(f=>{
+    const fe=f.e*avail(f);
+    if(open){const c=evalPair(R,f,null,D,hd,ctx.bt);c.sac=true;return c}
+    let order=dropOrder(R,AP,keep,ctx);
+    if(!ctx.sd)ctx.sd=new Map();
+    if(!ctx.sd.has(D)){const b=planDay(R,D);ctx.sd.set(D,{empt:b.assign.length<SLOTS.length,st:new Set(b.assign.map(a=>a.p.n))})}
+    const sD=ctx.sd.get(D);       // si ese día te faltan jugadores, llenar el hueco es traer a alguien sin soltar a quien juega ese día
+    if(sD.empt){const o2=order.filter(x=>!sD.st.has(x.d.n)); if(o2.length)order=o2}
+    const isS=d=>d.e<repl||d.e<=fe+1;
+    const tryD=[...order.slice(0,3),...order.slice(3).filter(x=>isS(x.d)).slice(0,2)].map(x=>x.d);
+    let bs=null,ba=null;
+    for(const d of tryD){
+      const c=evalPair(R,f,d,D,hd,ctx.bt); c.sac=isS(d);
+      if(c.sac&&better(bs,c))bs=c; if(better(ba,c))ba=c;
+    }
+    return bs||ba||{f,d:null,none:true,fe};
+  });
+}
+/* todo lo que depende de tu roster, tus protegidos, el % de día a día y la hora: se recalcula solo cuando algo de eso cambia */
+let _ep=null,_epK='',_epS=null;
+function epoch(){
+  const key=[st.dtd,[...st.prot].sort().join(','),todayKey(),nowT()].join('|');
+  if(_ep&&_epS===S&&_epK===key)return _ep;
+  const R0=roster(team(S.me));
+  _ep={R0,hd:hdOf('b'),AP:autoProt(R0),bt:{},loss:null,ev:new Map(),plans:new Map()};
+  _epK=key;_epS=S;return _ep;
+}
+const MAXC=16;
+function dayCands(D,filtered){
+  return faPool().filter(f=>f.gp>=5&&faGame(f,D)&&(!filtered||((st.pos==='ALL'||f.pos.split('/').includes(st.pos))&&(!st.hide||!f.inj))))
+    .sort((a,b)=>b.e*avail(b)*mf(b,D)-a.e*avail(a)*mf(a,D)).slice(0,MAXC);
+}
+function dayEvals(D,fas){            // evaluación (con caché) de agentes concretos para el día D sobre tu roster de hoy
+  const E=epoch(); let M=E.ev.get(D); if(!M){M=new Map();E.ev.set(D,M)}
+  const miss=fas.filter(f=>!M.has(f.n));
+  if(miss.length)addEvals(E.R0,D,miss,E.AP,new Set(),E).forEach(c=>M.set(c.f.n,c));
+  return fas.map(f=>M.get(f.n));
+}
+const evRank=e=>e.none?2:(e.sac&&e.net>=MINNET)?0:1;
+const evSort=(a,b)=>evRank(a)-evRank(b)||(a.none?b.fe-a.fe:b.net-a.net);
+const dayReady=D=>epoch().plans.has(D);
+function dayAnalysis(D){             // el plan del día no depende de los filtros de pantalla
+  const E=epoch(); if(E.plans.has(D))return E.plans.get(D);
+  const R0=E.R0, cap=Math.min(3,movesLeft()), fill=dayFill(R0,D), T=D===todayKey();
+  const late=!(S.sched[D]||[]).some(g=>!started(D,g.split(' ')[1]));
+  const evals=late?[]:dayEvals(D,dayCands(D,false)).slice().sort(evSort);
+  let R=R0,keep=new Set(),steps=[];
+  const pool=evals.filter(e=>!e.none&&e.sac&&e.net>=MINNET);
+  let cur=pool[0];
+  for(let k=0;k<cap;k++){
+    if(!cur||cur.net<MINNET)break;
+    steps.push(cur);
+    R=R.filter(x=>!cur.d||x.n!==cur.d.n).concat([{...cur.f,slot:'BE',from:cur.f.ws==='W'?NS():null}]);
+    keep.add(cur.f.n);
+    if(k+1>=cap)break;
+    const rest=evals.filter(e=>!e.none&&e.sac&&!steps.some(s=>s.f.n===e.f.n)).slice(0,8).map(e=>e.f);
+    cur=addEvals(R,D,rest,E.AP,keep,{hd:E.hd,bt:{},loss:null}).filter(e=>!e.none&&e.sac&&e.net>=MINNET).sort((a,b)=>b.net-a.net)[0];
+  }
+  const after=steps.length?planDay(R,D).tot:fill.tot;
+  const lg=S.teams.filter(t=>t.id!==S.me).map(t=>({t,n:dayFill(roster(t),D).filled}));
+  const dr=R0.filter(x=>x.slot!=='IR'&&!st.prot.has(x.n)&&!E.AP.has(x.n)), cheap=dr.length?Math.min(...dr.map(x=>x.e)):null;
+  const A={D,T,fill,late,cap,evals,steps,after,cheap,lg,net:steps.reduce((a,s)=>a+s.net,0),left:movesLeft()};
+  E.plans.set(D,A);return A;
+}
+function dayList(D){
+  const A=dayAnalysis(D); if(A.late)return [];
+  return dayEvals(D,dayCands(D,true)).slice().sort(evSort);
+}
+
+/* tarjeta del día: cuántos espacios llenas y si conviene llenar los que faltan */
+const slotList=a=>{const c={};a.forEach(x=>{c[x]=(c[x]||0)+1});return Object.keys(c).map(k=>c[k]>1?k+' ×'+c[k]:k).join(', ')};
+function dayCard(D,A){
+  const F=A.fill, T=A.T, lab=T?'hoy':'el '+dsh(D), H=T?'Hoy':dl(D), W=T?'hoy':'ese día';
+  if(!F.nba)return `<div class="glass card"><h3>${esc(H)}</h3><div class="note" style="margin-top:6px">Ese día no hay partidos de la NBA: nadie suma, ni tú ni los demás de la liga. No hay nada que hacer.</div></div>`;
+  const nm=p=>`<b>${esc(p.n)}</b>`, sg=x=>(x>=0?'+':'−')+f0(Math.abs(x));
+  const hero=`<div class="hero" style="margin-top:10px"><div class="stat"><div class="lab">Espacios con jugador</div><div class="big">${F.filled}<span class="mut" style="font-size:18px"> de 10</span></div><div class="note">${F.empty.length?'faltan '+slotList(F.empty):'completo'}</div></div><div class="stat"><div class="lab">Esperado ${W}</div><div class="big">≈${f0(F.tot)}</div><div class="note">pts${F.surplus?' · sobran '+F.surplus+' sentados':''}</div></div></div>`;
+  let v='';
+  if(A.late)v=`<div class="note" style="margin-top:10px">Ya empezaron todos los partidos de hoy: ya no puedes agregar a nadie para hoy.</div>`;
+  else if(!A.cap)v=`<div class="note" style="margin-top:10px">Ya usaste tus ${MOVES} movimientos de la semana, así que no puedes agregar a nadie.</div>`;
+  else if(A.steps.length){
+    v=`<div class="verdict"><b>Sí hay una jugada que vale la pena${A.steps.length>1?' ('+A.steps.length+' cambios)':''}.</b></div><ol class="why">${A.steps.map(s=>`<li>Agrega a ${nm(s.f)} (${s.f.pos} · ${esc(game(s.f.t,D).opp)} ${tm12(game(s.f.t,D).time)}) ${s.d?`y suelta a ${nm(s.d)}`:'(tienes lugar libre)'}: <b>${sg(s.gD)}</b> ${lab}, neto <b>${sg(s.net)}</b> en 2 semanas. <span class="mut">${s.starts>=2?'Te sirve '+s.starts+' días.':'Solo te sirve ese día.'}</span></li>`).join('')}</ol>
+      <div class="note">Así ${W} pasas de ≈${f0(F.tot)} a ≈${f0(A.after)} pts y gastas ${A.steps.length} de los ${A.left} movimientos que te quedan.</div>`;
+  } else {
+    const ok=A.evals.filter(e=>!e.none), top=ok[0], ts=ok.find(e=>e.sac), so=ok.find(e=>!e.sac&&e.d&&e.net>=MINNET&&(e.d.e-e.fe)<=3);
+    const pair=e=>`${nm(e.f)}${e.d?` por ${nm(e.d)}`:''}`, bul=[];
+    if(!top){
+      v=`<div class="verdict"><b>${A.evals.length?'No tienes a quién soltar.':'No hay a quién agregar.'}</b></div><div class="note">${A.evals.length?'Todos tus jugadores están protegidos.':'No hay agentes libres que valgan la pena para ese día.'}</div>`;
+    } else {
+      const bestF=Math.max(...ok.map(e=>e.fe)), cheap=A.cheap;
+      v=`<div class="verdict"><b>${so?'Hay una opción, pero pierdes un poco de calidad.':ts?'No veo una jugada que valga el movimiento.':`No conviene llenar ${W} soltando a alguien bueno.`}</b></div>`;
+      if(!ts)bul.push(`Los agentes que juegan ${W} rinden menos por partido (el mejor ≈${f0(bestF)}) que cualquiera de tus jugadores sueltables (el más flojo ≈${f0(cheap)}), y lo que sueltas no lo recuperas.`);
+      else{const rest=ts.net-ts.gD;bul.push(`Lo mejor soltando a alguien sacrificable es ${pair(ts)}: ${sg(ts.gD)} ${lab}, pero solo ${sg(ts.net)} en 2 semanas${rest<-1?` porque soltar a ${esc(ts.d.n)} te cuesta ≈${f0(-rest)} después`:''}.`)}
+      if(so)bul.push(`Una opción si aceptas perder un poco de calidad: ${pair(so)}. ${sg(so.gD)} ${lab} y ${sg(so.net)} en 2 semanas, pero ${esc(so.d.n)} rinde ${f1(so.d.e-so.fe)} más por partido.`);
+      else if(top.net>=MINNET&&!top.sac){const rest=top.net-top.gD;bul.push(`El que más sube tu total es ${pair(top)}: ${sg(top.gD)} ${lab}${rest<-1?`, pero solo ${sg(top.net)} en 2 semanas porque soltar a ${esc(top.d.n)} te cuesta ≈${f0(-rest)} después`:` y ${sg(top.net)} en 2 semanas`}. Aun así ${esc(top.d.n)} rinde ${f1(top.d.e-top.fe)} más por partido: ganas poco a cambio de perder calidad que no recuperas.`)}
+    }
+    if(bul.length)v+=`<ul class="why">${bul.map(x=>`<li>${x}</li>`).join('')}</ul>`;
+  }
+  let lg='';
+  if(!A.late&&A.lg&&A.lg.length){
+    const av_=A.lg.reduce((a,x)=>a+x.n,0)/A.lg.length;
+    lg=`<div class="note" style="margin-top:10px"><b>Tu liga ${W}:</b> tú llenas ${F.filled} de 10; ${A.lg.map(x=>tn(x.t)+' '+x.n).join(', ')}. ${F.filled<av_-0.5?'Vas abajo del promedio.':F.filled>av_+0.5?'Vas arriba del promedio.':'Estás en el promedio.'}${F.nba<=4?` Solo hay ${F.nba} ${F.nba===1?'partido':'partidos'} en toda la NBA: es un día flojo para todos.`:''}</div>`;
+  }
+  return `<div class="glass card"><h3>${esc(H)} · tu alineación</h3>${hero}${v}${lg}<div class="note" style="margin-top:10px">Lo que sueltas no lo recuperas: pasa a waivers 1 día y un compañero de la liga lo puede agarrar.</div></div>`;
+}
+function faDayRow(e,D){
+  const f=e.f, g=game(f.t,D), T=D===todayKey(), m=mf(f,D), W=T?'hoy':'ese día';
+  const rv=m>=1.02?' · rival que permite puntos':m<=0.98?' · rival cerrado':'';
+  const meta=`${f.t} · ${f.pos} · ${esc(g.opp)} ${tm12(g.time)} · ${f.mn!=null?f0(f.mn)+' min':'– min'} · prom ${f1(f.s)}${rv}`;
+  if(e.none)return `<div class="item tap" data-pl="${esc(f.n)}">${av(f,'sm')}<div class="grow"><div class="nm">${esc(f.n)} ${badge(f.inj)}</div><div class="meta">${meta}</div><div class="meta"><span class="pill">Sin a quién soltar</span></div></div><div style="text-align:right;min-width:52px"><div class="val" style="color:var(--amber)">${f0(e.fe*m)}</div><div class="note">pts ${W}</div></div></div>`;
+  const ok=e.sac&&e.net>=MINNET, sg=x=>(x>=0?'+':'−')+f0(Math.abs(x));
+  const pill=ok?'<span class="pill good">Vale el movimiento</span>':e.sac?'<span class="pill amber">No compensa</span>':'<span class="pill amber">Sueltas a alguien mejor</span>';
+  const gp=e.d&&!e.sac?` (rinde ${f1(Math.max(0,e.d.e-e.fe))} más)`:'';
+  return `<div class="item tap" data-ds="${esc(f.n)}|${e.d?esc(e.d.n):''}|${D}">${av(f,'sm')}<div class="grow"><div class="nm">${esc(f.n)} ${badge(f.inj)}</div><div class="meta">${meta}</div>
+    <div class="meta">${e.d?'Suelta a '+esc(e.d.n)+gp:'Tienes lugar libre'} · ${e.starts>=2?'te sirve '+e.starts+' días':'solo ese día'}</div><div style="margin-top:4px">${pill}</div></div>
+    <div style="text-align:right;min-width:60px"><div class="val" style="color:var(--amber)">${sg(e.gD)}</div><div class="note">${T?'hoy':'ese día'}</div><div class="note" style="margin-top:4px">neto ${sg(e.net)}</div></div><div class="chev">›</div></div>`;
+}
+/* hoja del cambio para un día: por qué, y día por día */
+function daySheet(a,dn,D){
+  const f=findAny(a), p=dn?findAny(dn):null; if(!f)return '<div class="mut">No encontré este cambio.</div>';
+  const R0=roster(team(S.me)), hd=hdOf('b'), repl=replLevel(), c=evalPair(R0,f,p,D,hd,{}), F=dayFill(R0,D), g=game(f.t,D), T=D===todayKey();
+  const lab=T?'hoy':dl(D), sg=x=>(x>=0?'+':'−')+f0(Math.abs(x)), m=g?mf(f,D):1, bul=[];
+  const R1=R0.filter(x=>!p||x.n!==p.n).concat([{...f,slot:'BE',from:f.ws==='W'?NS():null}]), PA=planDay(R0,D), PB=planDay(R1,D);
+  const dv=p?((PA.assign.find(x=>x.p.n===p.n)||{v:0}).v):0, fv=(PB.assign.find(x=>x.p.n===f.n)||{v:0}).v, W=T?'hoy':'ese día';
+  if(g)bul.push(`${esc(f.n)} juega ${esc(g.opp)} ${tm12(g.time)} y rinde ≈${f1(c.fe)} pts por partido${f.mn!=null?` (${f0(f.mn)} min)`:''}${m>=1.02?'; su rival permite puntos':m<=0.98?'; su rival cierra bien':''}.`);
+  if(p&&dv>0.5)bul.push(`${esc(p.n)} es de los pocos tuyos que juegan ${W}: si lo sueltas pierdes ≈${f0(dv)} pts de ese día y ${esc(f.n)} aporta ≈${f0(fv)} (${sg(c.gD)}).`);
+  else{
+    bul.push(F.empty.length?`${T?'Hoy':'Ese día'} te faltan ${F.empty.length} espacios con jugador (${F.empty.join(', ')}); ${esc(f.n)} ocupa uno y suma ≈${f0(fv)} pts.`:`${T?'Hoy':'Ese día'} ya tienes los 10 espacios con jugador, así que ${esc(f.n)} solo suma si rinde más que quien sale de tu alineación (${sg(c.gD)}).`);
+    if(p)bul.push(game(p.t,D)?`${esc(p.n)} juega ${W} pero no entraba en tu alineación, así que soltarlo no te quita nada ese día.`:`${esc(p.n)} no juega ${W}, así que soltarlo no te quita nada ese día.`);
+  }
+  if(p){
+    const rest=c.net-c.gD;
+    bul.push(rest>=-0.5?`Los demás días no pierdes nada${rest>0.5?`: ganas ${sg(rest)} porque ${esc(f.n)} también te sirve ${c.starts>=2?'otros días':'ahí'}`:''}.`:`Los demás días pierdes ≈${f0(-rest)} pts, porque ${esc(p.n)} te servía en otros partidos y ya no lo tienes.`);
+    const gapq=p.e-c.fe;
+    bul.push(p.e<repl?`${esc(p.n)} es sacrificable: rinde ${f1(p.e)} por partido y ya hay agentes libres de ≈${f0(repl)}.`:gapq<=1?`${esc(p.n)} rinde ${f1(p.e)} por partido, casi lo mismo que ${esc(f.n)} (${f1(c.fe)}): no pierdes calidad al soltarlo.`:`Ojo: ${esc(p.n)} rinde ${f1(p.e)} por partido, ${f1(gapq)} más que ${esc(f.n)} (${f1(c.fe)}), y más que lo que hay libre (≈${f0(repl)}). Es perder calidad que no recuperas.`);
+    bul.push('Lo que sueltas no lo recuperas: pasa a waivers con 1 día de espera y un compañero de la liga lo puede agarrar.');
+  }
+  bul.push(c.starts>=2?`Te sirve ${c.starts} días con tu mejor alineación.`:`Solo entraría de titular ${c.starts===1?'ese día':'ningún día'}: es una jugada de una noche.`);
+  const left=movesLeft();
+  bul.push(`Gasta 1 de tus movimientos: te quedan ${left} de ${MOVES} esta semana.`);
+  if(c.net<MINNET)bul.push(`El neto es bajo (${sg(c.net)}): no compensa gastar el movimiento ni perder a ${p?esc(p.n):'ese lugar'}.`);
+  if(f.inj==='DTD')bul.push(`${esc(f.n)} está en día a día: ya descuento ${Math.round((1-st.dtd)*100)}% por riesgo de que no juegue.`);
+  const rows=c.rows.map(r=>`<tr><td style="text-align:left">${dl(r.day)}</td><td>≈${f0(r.a)}</td><td>≈${f0(r.b)}</td><td class="y">${sg(r.diff)}</td></tr>`).join('');
+  return `<div class="glass card"><h3>Cambio para ${esc(lab)}</h3><div class="row" style="gap:10px;margin-top:10px">${av(f)}<div class="grow"><div class="note">Agregar</div><div class="nm" style="font-size:17px">${esc(f.n)}</div><div class="meta">${f.t} · ${esc(f.pos)} ${badge(f.inj)}</div></div></div>
+    ${p?`<div class="row" style="gap:10px;margin-top:12px">${av(p)}<div class="grow"><div class="note">Soltar</div><div class="nm" style="font-size:17px">${esc(p.n)}</div><div class="meta">${p.t} · ${esc(p.pos)} ${badge(p.inj)}</div></div></div>`:''}
+    <div class="hero" style="margin-top:14px"><div class="stat"><div class="lab">${esc(T?'Hoy':dsh(D))}</div><div class="big">${sg(c.gD)}</div><div class="note">pts ese día</div></div><div class="stat"><div class="lab">Neto</div><div class="big">${sg(c.net)}</div><div class="note">pts en 2 semanas</div></div></div></div>
+    <div class="glass card"><h3>Por qué</h3><ul class="why">${bul.map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    <div class="glass card"><h3>Día por día</h3><div class="note" style="margin:6px 0 8px">Puntos esperados de tu mejor alineación, sin el cambio y con el cambio. Solo los días en que juega alguno de los dos.</div><div class="scroll"><table class="wk"><tr><th style="text-align:left">Día</th><th>Sin</th><th>Con</th><th>Dif.</th></tr>${rows}</table></div></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="chip" data-pl="${esc(f.n)}">Ver a ${esc(f.n)}</button>${p?`<button class="chip" data-pl="${esc(p.n)}">Ver a ${esc(p.n)}</button>`:''}</div>`;
+}
+/* huecos de la semana: por día, cuántos de tus 10 espacios llenas, cuántos faltan y cuántos sobran */
+function gapCard(R){
+  const hdC=hdays('c'), hdN=hdays('n'), fills={}, TD=todayKey();
+  [...hdC,...hdN].forEach(d=>{fills[d]=dayFill(R,d)});
+  const over=d=>d===TD&&!(S.sched[d]||[]).some(g=>!started(d,g.split(' ')[1]));      // hoy, cuando ya empezaron todos los partidos
+  const row=d=>{const F=fills[d];
+    const a=!F.nba?'<span class="mut">sin partidos</span>':over(d)?'<span class="mut">ya empezaron</span>':[F.empty.length?`<b style="color:var(--amber)">faltan ${F.empty.length}</b>`:'<span class="mut">completo</span>',F.surplus?`<span class="mut">sobran ${F.surplus}</span>`:''].filter(Boolean).join(' · ');
+    return `<div class="row tap" data-goad="${d}" style="padding:6px 0"><div style="width:62px" class="note">${esc(dayName(d))}</div><div class="grow"><div class="bar ${F.filled<10?'':'me'}"><i style="width:${Math.max(3,F.filled*10)}%"></i></div></div><div class="num" style="width:44px;text-align:right"><b>${F.nba?F.filled:'–'}</b>/10</div><div style="width:104px;text-align:right"><div class="note">${a}</div>${F.nba?`<div class="note mut">${F.nba} ${F.nba===1?'partido':'partidos'} NBA</div>`:''}</div></div>`};
+  const live=[...hdC,...hdN].filter(d=>fills[d].nba&&!over(d)), big=live.filter(d=>fills[d].nba>=5&&fills[d].empty.length>=2);
+  const sob=live.reduce((a,d)=>a+fills[d].surplus,0), thin=live.filter(d=>fills[d].nba<5&&fills[d].empty.length>=2);
+  const worst=big.slice().sort((a,b)=>fills[b].empty.length-fills[a].empty.length||(a<b?-1:1)).slice(0,3);
+  let sum='';
+  if(worst.length)sum+=`Los días con más huecos y con partidos suficientes: ${worst.map(d=>`<b>${esc(dayName(d).toLowerCase())}</b> (faltan ${fills[d].empty.length})`).join(', ')}. Ahí un agente te suma más. `;
+  if(thin.length)sum+=`En los días con pocos partidos en la NBA (${thin.slice(0,3).map(d=>esc(dayName(d).toLowerCase())+' '+fills[d].nba).join(', ')}) te quedas corto tú y todos los demás. `;
+  sum+=sob>0?`Te sobran ${sob} ${sob===1?'jugador sentado que sí juega':'jugadores sentados que sí juegan'}: ahí puedes soltar a alguien sin perder puntos.`:'No te sobra nadie sentado: no hay jugadores de más en tu roster.';
+  return `<div class="glass card"><h3>Huecos de la semana</h3>
+    <div class="note" style="margin:6px 0 8px">Cada día tienes 10 espacios. Se pierden puntos de dos formas: espacios vacíos (nadie que juegue) y jugadores que sí juegan pero no caben. Lo ideal es 10 que jueguen cada día. Toca un día para ver los agentes que juegan ese día.</div>
+    ${hdC.map(row).join('')}
+    <details style="margin-top:6px"><summary class="note" style="cursor:pointer">Semana siguiente</summary>${hdN.map(row).join('')}</details>
+    <div class="note" style="margin-top:8px">${sum}</div></div>`;
 }
 
 function dayView(){
@@ -576,20 +811,34 @@ function ligaView(){
 }
 
 function agentsView(){
-  const hd=horizon('n');
+  const hdAll=hdOf('b'), TD=todayKey(); if(st.ad&&!hdAll.includes(st.ad))st.ad=null;
+  const D=st.ad, hd=horizon('n');
+  const chips=['ALL','PG','SG','SF','PF','C'].map(p=>`<button class="chip ${st.pos===p?'on':''}" data-pos="${p}">${p==='ALL'?'Todos':p}</button>`).join('');
+  const dchips=`<div class="chips sc" style="margin-bottom:10px"><button class="chip ${D?'':'on'}" data-ad="">Semana ${S.mu+1}</button>${hdAll.map(d=>`<button class="chip ${D===d?'on':''}" data-ad="${d}">${d===TD?'Hoy':dsh(d)}</button>`).join('')}</div>`;
+  const filt=`<div class="chips">${chips}</div><div class="chips" style="margin-top:8px"><button class="chip ${st.hide?'on':''}" id="hide">Ocultar lesionados</button></div>`;
+  if(D){
+    const head=`<div class="glass card"><h3>Agentes libres</h3><div class="note" style="margin:6px 0 10px">Elige un día para ver solo los agentes que juegan ese día (sin los que ya empezaron ni los que siguen en waivers). Cada uno se mide contra el jugador al que tendrías que soltar.</div>${dchips}${filt}</div>`;
+    if(!dayReady(D)){
+      clearTimeout(window.__dc);window.__dc=setTimeout(()=>{try{dayAnalysis(D)}catch(_){}if(st.tab==='agents'&&st.ad===D)render()},30);
+      return head+`<div class="glass card"><div class="note">Calculando quién te conviene ese día…</div></div>`;
+    }
+    const A=dayAnalysis(D), L=dayList(D), when=D===TD?'hoy':dl(D);
+    const list=(A.fill.nba&&!A.late)?`<div class="glass card"><h3>Juegan ${esc(when)}</h3><div class="note" style="margin:6px 0 4px">Los ${MAXC} que más rinden ese día. "Hoy" es lo que te suma ese día; "neto" es lo que te suma o te cuesta en 2 semanas contando al que sueltas. Toca uno para el desglose.</div>${L.map(e=>faDayRow(e,D)).join('')||`<div class="mut" style="margin-top:8px">${st.pos!=='ALL'||st.hide?'No hay agentes con ese filtro.':'No hay agentes libres que valgan la pena ese día.'}</div>`}</div>`:'';
+    return head+dayCard(D,A)+list;
+  }
   let L=S.fa.map(mkF).map(f=>({f,g:gamesIn(f.t,hd),sun:game(f.t,END())?1:0}));
   L.forEach(x=>{x.v=x.f.e*avail(x.f)*x.g});
   if(st.pos!=='ALL')L=L.filter(x=>x.f.pos.split('/').includes(st.pos));
   if(st.hide)L=L.filter(x=>!x.f.inj);
   L.sort((a,b)=>b.v-a.v);
-  const chips=['ALL','PG','SG','SF','PF','C'].map(p=>`<button class="chip ${st.pos===p?'on':''}" data-pos="${p}">${p==='ALL'?'Todos':p}</button>`).join('');
   const rows=L.slice(0,30).map(x=>{const f=x.f;const trend=(f.l15!=null&&f.s!=null&&f.l15-f.s>=4)?'<span class="pill good">Subiendo</span>':'';const rare=f.own<45?'<span class="pill amber">Poco visto</span>':'';
     return `<div class="item tap" data-pl="${esc(f.n)}">${av(f,'sm')}<div class="grow"><div class="nm">${esc(f.n)} ${badge(f.inj)} ${f.ws==='W'?'<span class="pill">Waivers</span>':''}</div>
       <div class="meta">${f.t} · ${f.pos} · prom ${f1(f.s)} · últ. 15: ${f1(f.l15)} · ${f.mn!=null?f0(f.mn)+' min':'– min'} · ${f.own}% dueño ${trend} ${rare}</div></div>
       <div style="text-align:right"><div class="val">${x.g}</div><div class="note">juegos</div></div>
       <div style="text-align:right;min-width:52px"><div class="val" style="color:var(--amber)">${f0(x.v)}</div><div class="note">sem. ${S.mu+1}</div></div></div>`}).join('');
-  return `<div class="glass card"><h3>Agentes libres</h3><div class="note" style="margin:6px 0 10px">Ordenados por puntos esperados en la semana ${S.mu+1} (${rng(NS(),NE())}): promedio ponderado × juegos × probabilidad de jugar. Son los 45 con mejor rendimiento reciente entre los disponibles.</div>
-    <div class="chips">${chips}</div><div class="chips" style="margin-top:8px"><button class="chip ${st.hide?'on':''}" id="hide">Ocultar lesionados</button></div></div>
+  return `<div class="glass card"><h3>Agentes libres</h3><div class="note" style="margin:6px 0 10px">Ordenados por puntos esperados en la semana ${S.mu+1} (${rng(NS(),NE())}): promedio ponderado × juegos × probabilidad de jugar. Son los 45 con mejor rendimiento reciente entre los disponibles. Para ver solo los que juegan un día, toca ese día.</div>
+    ${dchips}${filt}</div>
+    ${gapCard(roster(team(S.me)))}
     <div class="glass card">${rows||'<div class="mut">No hay jugadores con ese filtro.</div>'}</div>`;
 }
 
@@ -832,9 +1081,29 @@ function radarSheet(name){
     <div class="glass card"><h3>Sobre el jugador</h3><ul class="why">${why.map(x=>`<li>${x}</li>`).join('')}</ul></div>
     <div class="row" style="gap:8px;flex-wrap:wrap"><button class="chip" data-pl="${esc(f.n)}">Ver ficha completa</button></div>`;
 }
+/* Minas: días con huecos en tu alineación y la mejor jugada para cada uno (se calcula aparte para no trabar la pantalla) */
+function gapGold(){
+  const R=roster(team(S.me)), TD=todayKey();
+  const gaps=hdOf('b').map(d=>({d,F:dayFill(R,d)})).filter(x=>x.F.nba&&x.F.empty.length>=2&&!(x.d===TD&&!(S.sched[x.d]||[]).some(g=>!started(x.d,g.split(' ')[1])))).slice(0,3);
+  if(!gaps.length)return '';
+  const todo=gaps.filter(x=>!dayReady(x.d));
+  if(todo.length){clearTimeout(window.__gg);window.__gg=setTimeout(()=>{try{todo.forEach(x=>dayAnalysis(x.d))}catch(_){}if(st.tab==='gold'&&st.mt==='gold')render()},30)}
+  const sg=x=>(x>=0?'+':'−')+f0(Math.abs(x));
+  const rows=gaps.map(({d,F})=>{
+    let line='<span class="mut">calculando…</span>',val='';
+    if(dayReady(d)){
+      const A=dayAnalysis(d), s=A.steps[0], so=A.evals.find(e=>!e.none&&!e.sac&&e.d&&e.net>=MINNET&&(e.d.e-e.fe)<=3);
+      if(s){line=`Agrega a <b>${esc(s.f.n)}</b>${s.d?` y suelta a ${esc(s.d.n)}`:''}`;val=`<div class="val">${sg(s.net)}</div><div class="note">neto</div>`}
+      else if(so){line=`Opción si aceptas perder un poco de calidad: ${esc(so.f.n)} por ${esc(so.d.n)}`;val=`<div class="val">${sg(so.net)}</div><div class="note">neto</div>`}
+      else line='Ningún agente vale el movimiento sin soltar a alguien mejor';
+    }
+    return `<div class="item tap" data-goad="${d}"><div class="grow"><div class="nm">${esc(dayName(d))}: ${F.filled} de 10 espacios <span class="mut" style="font-weight:400">· ${F.nba} ${F.nba===1?'partido':'partidos'} NBA</span></div><div class="meta">Faltan ${F.empty.length} · ${line}</div></div>${val}<div class="chev">›</div></div>`;
+  }).join('');
+  return `<div class="glass card"><h3>Días con huecos</h3><div class="note" style="margin:6px 0 4px">Días en que te faltan jugadores que jueguen. Con pocos partidos en la NBA les pasa a todos; solo conviene llenarlos si no sueltas a alguien mejor. Toca uno para ver los agentes de ese día.</div>${rows}</div>`;
+}
 function minasView(){
   const tabs=`<div class="chips" style="margin-bottom:12px"><button class="chip ${st.mt==='gold'?'on':''}" data-mt="gold">Minas de oro</button><button class="chip ${st.mt==='radar'?'on':''}" data-mt="radar">Mi radar</button></div>`;
-  return tabs+(st.mt==='radar'?radarView():goldView());
+  return tabs+(st.mt==='radar'?radarView():goldView()+gapGold());
 }
 const TABS=[['roster','Roster'],['liga','Liga'],['agents','Agentes'],['plan','Plan'],['gold','Minas']];
 /* ---------- hojas de detalle ---------- */
@@ -910,7 +1179,7 @@ function renderSheet(){
   const el=document.getElementById('sheet'); if(!el)return;
   const s=st.sheet;
   if(!s){el.innerHTML='';el.className='';document.body.style.overflow='';return}
-  const body=s.t==='sw'?swapSheet(s.a,s.d,s.k):s.t==='rd'?radarSheet(s.n):playerSheet(s.n);
+  const body=s.t==='sw'?swapSheet(s.a,s.d,s.k):s.t==='rd'?radarSheet(s.n):s.t==='ds'?daySheet(s.a,s.d,s.day):playerSheet(s.n);
   const keep=el.firstElementChild?el.scrollTop:0;
   el.className='open';
   el.innerHTML=`<div class="wrap"><div class="shbar"><button class="arrow" id="back" aria-label="Atrás">‹</button><div class="note">Desliza hacia la derecha para volver</div></div>${body}</div>`;
@@ -960,9 +1229,11 @@ async function load(manual){
 }
 if(typeof document!=='undefined'){
   document.addEventListener('click',e=>{
-    const tp=e.target.closest('[data-pl],[data-sw],[data-rd]');
+    const tp=e.target.closest('[data-pl],[data-sw],[data-rd],[data-ds],[data-goad]');
     if(tp&&!e.target.closest('[data-prot]')){
-      if(tp.dataset.sw){const [a,d,k]=tp.dataset.sw.split('|');openSheet({t:'sw',a,d,k});}
+      if(tp.dataset.goad){st.tab='agents';st.ad=tp.dataset.goad;if(st.sheet){st.sheetStack=[];st.sheet=null;renderSheet()}render();window.scrollTo(0,0);}
+      else if(tp.dataset.ds){const [a,d,day]=tp.dataset.ds.split('|');openSheet({t:'ds',a,d,day});}
+      else if(tp.dataset.sw){const [a,d,k]=tp.dataset.sw.split('|');openSheet({t:'sw',a,d,k});}
       else if(tp.dataset.rd){openSheet({t:'rd',n:tp.dataset.rd});}
       else openSheet({t:'pl',n:tp.dataset.pl});
       return;
@@ -978,6 +1249,7 @@ if(typeof document!=='undefined'){
     else if(t.dataset.rh){st.rh=t.dataset.rh;renderSheet();}
     else if(t.dataset.view){st.view=t.dataset.view;render();}
     else if(t.dataset.wk){st.wk=t.dataset.wk;render();}
+    else if(t.dataset.ad!==undefined){st.ad=t.dataset.ad||null;render();}
     else if(t.dataset.pos){st.pos=t.dataset.pos;render();}
     else if(t.id==='hide'){st.hide=!st.hide;render();}
     else if(t.dataset.h){st.h=t.dataset.h;render();}
