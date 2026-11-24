@@ -1177,7 +1177,7 @@ function trRows(t){                              // roster tal como quedaría co
 function trSig(){
   const r=S.teams.map(t=>t.r.map(a=>a[0]+a[2]+a[3]+a[6]).join(',')).join(';');
   const g=Object.keys(S.sched).sort().map(d=>d+(S.sched[d]||[]).length).join(',');
-  return [st.dtd,[...st.prot].sort().join(','),todayKey(),S.mu,r,g,(S.fa[0]||[])[0],S.rs||'',S.ir==null?'':S.ir,JSON.stringify(S.op||''),st.trp||'1',JSON.stringify((S.pt||[]).map(x=>[x.i,x.st,x.ty,x.pd]))].join('|');
+  return [st.dtd,[...st.prot].sort().join(','),todayKey(),S.mu,r,g,(S.fa[0]||[])[0],S.rs||'',S.ir==null?'':S.ir,JSON.stringify(S.op||''),st.trp||'1',JSON.stringify((S.pt||[]).map(x=>[x.i,x.st,x.ty,x.pd])),Math.floor(Date.now()/3.6e6)].join('|');
 }
 let _tcT=0;
 const trTouch=()=>{_tcT=0};                  // se llama al dibujar: así los cambios de datos o de intocables se notan al momento
@@ -1212,10 +1212,23 @@ const pvOne=(p,v)=>{const s=p.s!=null?p.s:(p.pr!=null?p.pr:p.e),r=p.pr!=null?p.p
 function trEnt(p){return {n:p.n,w:p,l:asLT(p),p,ir:p.slot==='IR',out:isOut(p),pv:{s:pvOne(p,'s'),r:pvOne(p,'r'),m:pvOne(p,'m')}}}
 const trIn=e=>({n:e.n,w:slotBE(e.w),l:e.l,p:e.p,ir:false,out:e.out,pv:e.pv});
 
+/* un intercambio aceptado hoy se ejecuta después de la revisión de la liga (S.tr.rev horas): los partidos de antes no cuentan.
+   Si se ejecuta tarde (a partir de las 6 pm ET) cuento desde el día siguiente; si es temprano, desde ese mismo día. */
+function trStart(){
+  const C=trCache();if(C.stt)return C.stt;
+  const rev=(S.tr&&S.tr.rev)||0;
+  if(!rev)return C.stt={first:null,rev:0,exec:0};
+  const ex=Date.now()+rev*3600e3;
+  const p=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(ex)).reduce((a,x)=>(a[x.type]=x.value,a),{});
+  const dk=p.month+'-'+p.day,late=Number(p.hour)>=18;
+  return C.stt={first:days().find(d=>late?d>dk:d>=dk)||null,rev,exec:ex};
+}
 function trHor(){
   const C=trCache();if(C.hor)return C.hor;
-  const c=horizon('c'),n=horizon('n'),useC=c.length>=3,wk=useC?c:n,lt=[...c,...n];
-  return C.hor={c,n,wk,lt,wkMu:useC?S.mu:S.mu+1,wkLab:useC?'el resto de la semana '+S.mu:'la semana '+(S.mu+1),k:7/Math.max(1,lt.length),wkK:7/Math.max(1,wk.length)};
+  const T=trStart(),c0=horizon('c'),n0=horizon('n'),fl=T.first;
+  const c=fl?c0.filter(d=>d>=fl):c0,n=fl?n0.filter(d=>d>=fl):n0,useC=c.length>=3,wk=useC?c:n,lt=[...c,...n];
+  const lag=useC&&fl&&c.length<c0.length?' (desde el '+dl(c[0]||fl).toLowerCase()+')':'';
+  return C.hor={c,n,wk,lt,wkMu:useC?S.mu:S.mu+1,wkLab:(useC?'el resto de la semana '+S.mu:'la semana '+(S.mu+1))+lag,k:7/Math.max(1,lt.length),wkK:7/Math.max(1,wk.length)};
 }
 function tvW(E){const H=trHor(),R=E.map(e=>e.w);let t=0;for(const d of H.wk)t+=fastDay(R,d);return t}
 function tvL(E){const H=trHor(),R=E.map(e=>e.l);let t=0;for(const d of H.lt)t+=fastDay(R,d);return t*H.k}
@@ -1480,6 +1493,8 @@ function trRules(){
     parts.push(late?`<b>Ya pasó la fecha límite de intercambios (${d} ${MO[m-1]}).</b> Revisa en ESPN si todavía se puede.`:`Fecha límite de intercambios: ${d} ${MO[m-1]}.`);
   }
   if(t&&t.rev!=null)parts.push(`Revisión de la liga: ${t.rev} h${t.veto!=null?` · vetos para cancelar: ${t.veto}`:''}.`);
+  const T=trStart();
+  if(T.rev&&T.first)parts.push(`Un intercambio que se acepte hoy se ejecutaría como pronto el ${esc(trWhen(T.exec))}, así que solo cuento los partidos desde el ${dl(T.first).toLowerCase()}.`);
   if(!parts.length)parts.push('Todavía no tengo las reglas de intercambio de tu liga (fecha límite y revisión): confírmalas en ESPN. Tu roster es de '+trLim()+' jugadores.');
   return parts.join(' ');
 }
@@ -1545,7 +1560,7 @@ function trPendCard(full){                        // aviso de trades en revisió
 function tradesView(){
   trTouch();
   const mode=st.trm||'w',chips=TR_MODES.map(([k,l])=>`<button class="chip ${mode===k?'on':''}" data-trm="${k}">${l}</button>`).join('');
-  const head=`<div class="glass card"><h3>Trades</h3><div class="note" style="margin:6px 0 10px">Intercambios con tus compañeros: 1 a 1, 1 a 2, 2 a 1 o 2 a 2. ${esc(trRules())}</div><div class="chips">${chips}</div></div>`;
+  const head=`<div class="glass card"><h3>Trades</h3><div class="note" style="margin:6px 0 10px">Intercambios con tus compañeros: 1 a 1, 1 a 2, 2 a 1 o 2 a 2. ${trRules()}</div><div class="chips">${chips}</div></div>`;
   if(mode==='o')return head+trPendCard(true)+offerView();
   const fr=`<button class="chip ${!st.trf?'on':''}" data-trf="0">Todos</button>`+S.teams.filter(t=>t.id!==S.me).map(t=>`<button class="chip ${st.trf===t.id?'on':''}" data-trf="${t.id}">${esc(tn(t))}</button>`).join('');
   const dsc=mode==='d'?`<div class="chips" style="margin-top:8px">${[['s','Muy discreta'],['m','Moderada'],['x','Máxima']].map(([k,l])=>`<button class="chip ${(st.trd||'m')===k?'on':''}" data-trd="${k}">${l}</button>`).join('')}</div>`:'';
