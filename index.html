@@ -174,7 +174,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',tro:{f:0,g:[],q:[]}};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',trs:'',tro:{f:0,g:[],q:[]}};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -1315,13 +1315,14 @@ function trProxScore(H,mode,p,rho,opp,cont,out){
 }
 /* candidatos baratos (sin armar alineaciones nuevas): los mejores por modo y compañero */
 function trCands(mode){
-  const C=trCache(),A=trTeam(S.me),out=[];
+  const C=trCache(),A=trTeam(S.me),out=[],fmt=st.trs||'';
   if(!C.sub.give)C.sub.give=trSubsets(A.E.filter(e=>!st.prot.has(e.n)));
   for(const t of S.teams){
     if(t.id===S.me)continue;
     const B=trTeam(t.id),P=trPair(t.id),opp=trOpp(t.id),cont=trCont(t.id),list=[],H=trHor();
     if(!C.sub[t.id])C.sub[t.id]=trSubsets(B.E);
     for(const G of C.sub.give)for(const Q of C.sub[t.id]){
+      if(fmt&&(G.length!==+fmt[0]||Q.length!==+fmt[1]))continue;
       const rho=trRho(G,Q);
       if(rho.min<0.88)continue;
       const sc0=trProxScore(H,mode,trProx(A,B,P,G,Q),rho,opp,cont,G[0].out||(G.length>1&&G[1].out));
@@ -1354,7 +1355,7 @@ function trFinish(mode,cands){
   out.sort((a,b)=>(!!a.loose-!!b.loose)||b.s-a.s);
   return {list:out.slice(0,TR_KEEP).map(x=>({...x.r,score:x.s,loose:!!x.loose})),n:cands.length};
 }
-const trResKey=mode=>mode+'|'+(mode==='d'?(st.trd||'m'):'');
+const trResKey=mode=>mode+'|'+(mode==='d'?(st.trd||'m'):'')+'|'+(st.trs||'');
 function trRankSync(mode){
   const C=trCache(),k=trResKey(mode);if(C.res[k])return C.res[k];
   return C.res[k]=trFinish(mode,trCands(mode));
@@ -1401,7 +1402,7 @@ function trCounterRes(fid,base,variants){
 }
 
 
-/* ---------- pestaña Traits: pantalla ---------- */
+/* ---------- pestaña Trades: pantalla ---------- */
 const trSg=x=>(x>=0?'+':'−')+f0(Math.abs(x));
 const trName=id=>tn(team(id));
 const trJoin=a=>a.map(n=>`<b>${esc(n)}</b>`).join(' + ');
@@ -1464,11 +1465,12 @@ const TR_EMPTY={
 function tradesView(){
   trTouch();
   const mode=st.trm||'w',chips=TR_MODES.map(([k,l])=>`<button class="chip ${mode===k?'on':''}" data-trm="${k}">${l}</button>`).join('');
-  const head=`<div class="glass card"><h3>Traits</h3><div class="note" style="margin:6px 0 10px">Intercambios con tus compañeros (hasta 2 por 2). ${esc(trRules())}</div><div class="chips">${chips}</div></div>`;
+  const head=`<div class="glass card"><h3>Trades</h3><div class="note" style="margin:6px 0 10px">Intercambios con tus compañeros: 1 a 1, 1 a 2, 2 a 1 o 2 a 2. ${esc(trRules())}</div><div class="chips">${chips}</div></div>`;
   if(mode==='o')return head+offerView();
   const fr=`<button class="chip ${!st.trf?'on':''}" data-trf="0">Todos</button>`+S.teams.filter(t=>t.id!==S.me).map(t=>`<button class="chip ${st.trf===t.id?'on':''}" data-trf="${t.id}">${esc(tn(t))}</button>`).join('');
   const dsc=mode==='d'?`<div class="chips" style="margin-top:8px">${[['s','Muy discreta'],['m','Moderada'],['x','Máxima']].map(([k,l])=>`<button class="chip ${(st.trd||'m')===k?'on':''}" data-trd="${k}">${l}</button>`).join('')}</div>`:'';
-  const top=`<div class="glass card"><h3>${esc(TR_MODES.find(x=>x[0]===mode)[1])}</h3><div class="note" style="margin:6px 0 10px">${TR_DESC[mode]()}</div>${dsc}<div class="chips sc" style="margin-top:10px">${fr}</div></div>`;
+  const fm=`<div class="note" style="margin:12px 0 6px">Formato: tú das X y recibes Y</div><div class="chips">${[['','Todos'],['11','1 a 1'],['12','1 a 2'],['21','2 a 1'],['22','2 a 2']].map(([k,l])=>`<button class="chip sm ${(st.trs||'')===k?'on':''}" data-trs="${k}">${l}</button>`).join('')}</div>`;
+  const top=`<div class="glass card"><h3>${esc(TR_MODES.find(x=>x[0]===mode)[1])}</h3><div class="note" style="margin:6px 0 10px">${TR_DESC[mode]()}</div>${dsc}${fm}<div class="note" style="margin:12px 0 6px">Compañero</div><div class="chips sc">${fr}</div></div>`;
   const C=trCache(),k=trResKey(mode),job=C.job[k];
   if(!C.res[k]){
     if(job&&job.err)return head+top+`<div class="glass card"><div class="note">No pude calcular los intercambios (${esc(job.err)}). Recarga con ↻.</div></div>`;
@@ -1476,7 +1478,8 @@ function tradesView(){
     return head+top+`<div class="glass card"><div class="note">Buscando intercambios con tus 5 compañeros… <span id="trpct">${job?Math.round((job.pct||0)*100)+'%':''}</span></div></div>`;
   }
   const R=C.res[k],list=R.list.filter(x=>!st.trf||x.fid===st.trf).slice(0,10);
-  const body=list.length?list.map(r=>trRow(r,mode)).join(''):`<div class="note" style="padding:8px 0">${TR_EMPTY[mode]}</div>`;
+  const fx=st.trs?(st.trs==='12'?' Recibir 2 jugadores por 1 casi nunca se le ve justo a tu amigo (te da más cuerpos y más talento) y tu roster está lleno, por eso salen pocos o ninguno.':` No hay propuestas con ese formato (${st.trs[0]} a ${st.trs[1]}).`)+' Prueba otro formato o “Todos”.':'';
+  const body=list.length?list.map(r=>trRow(r,mode)).join(''):`<div class="note" style="padding:8px 0">${TR_EMPTY[mode]}${fx}</div>`;
   const loose=mode==='p'&&list.some(x=>x.loose)?`<div class="note" style="margin-top:8px">Hay pocos cambios donde los dos mejoran claramente; los últimos son “casi parejos”.</div>`:'';
   return head+top+`<div class="glass card"><h3>Propuestas</h3><div class="note" style="margin:6px 0 4px">Toca una para ver el desglose. “Aceptación” es una estimación de cómo se ve en números, no de cómo piensa cada amigo. Revisé ${R.n} propuestas finalistas de miles de combinaciones. No cuenta lo que ya podrías ganar con agentes libres.</div>${body}${loose}</div>`;
 }
@@ -1589,10 +1592,11 @@ function offerView(){
     return `<div class="item"><div class="grow"><div class="note"><b>${esc(trName(s.f))}</b></div><div class="nm" style="font-weight:600">Das: ${s.g.map(esc).join(' + ')}</div><div class="nm" style="font-weight:600">Recibes: ${s.q.map(esc).join(' + ')}</div><div class="meta">${line}</div></div><div style="display:flex;flex-direction:column;gap:6px"><button class="chip" data-topen="${i}">Abrir</button><button class="chip" data-tdel="${i}">Borrar</button></div></div>`}).join('')}</div>`:'';
   return form.replace('@@BAR@@',bar)+res+list;
 }
-function trTap(d){                              // lo que hacen los botones de Traits; devuelve true si lo manejó
+function trTap(d){                              // lo que hacen los botones de Trades; devuelve true si lo manejó
   if(d.trm){st.trm=d.trm;render();return true}
   if(d.trf!==undefined){st.trf=Number(d.trf)||0;render();return true}
   if(d.trd){st.trd=d.trd;render();return true}
+  if(d.trs!==undefined){st.trs=d.trs;render();return true}
   if(d.trf2){st.tro={f:Number(d.trf2),g:[],q:[]};render();return true}
   if(d.og||d.oq){const o=st.tro,k=d.og?'g':'q',n=d.og||d.oq;o[k]=o[k].includes(n)?o[k].filter(x=>x!==n):[...o[k],n].slice(-2);render();return true}
   if(d.tsave){const a=trSaved(),o=st.tro;if(a.some(s=>s.key===d.tsave))return true;a.unshift({key:d.tsave,f:o.f,g:[...o.g],q:[...o.q]});trSaveList(a);render();return true}
@@ -1608,7 +1612,7 @@ function trTap(d){                              // lo que hacen los botones de T
 }
 
 /*TR-END*/
-const TABS=[['roster','Roster'],['liga','Liga'],['agents','Agentes'],['plan','Plan'],['gold','Minas'],['trade','Traits']];
+const TABS=[['roster','Roster'],['liga','Liga'],['agents','Agentes'],['plan','Plan'],['gold','Minas'],['trade','Trades']];
 /* ---------- hojas de detalle ---------- */
 const barRow=(l,v,max)=>`<div class="row" style="padding:4px 0"><div style="width:86px" class="note">${l}</div><div class="grow"><div class="bar"><i style="width:${v==null?0:Math.max(3,Math.min(100,v/max*100))}%"></i></div></div><div class="num" style="width:44px;text-align:right"><b>${f1(v)}</b></div></div>`;
 function schedRows(p,hd){

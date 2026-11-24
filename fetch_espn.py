@@ -136,7 +136,7 @@ def sp_date(sp): return ANCHOR_DATE + timedelta(days=sp - ANCHOR_SP)
 def key(d): return d.strftime("%m-%d")
 
 def league_extra(d, mu):
-    """Datos de la liga que usa la pestana Traits: tamano del roster, rival de cada semana y reglas de intercambio.
+    """Datos de la liga que usa la pestana Trades: tamano del roster, rival de cada semana y reglas de intercambio.
     Todo es opcional: si ESPN no lo da (o cambia el formato) se omite y la app usa valores por defecto."""
     x = {}
     st = d.get("settings") or {}
