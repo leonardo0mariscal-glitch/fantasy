@@ -82,7 +82,7 @@ h3{font-size:16px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em
 .bar.me>i{background:linear-gradient(90deg,#2c2d32,#0c0c0e)}
 nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;padding:0 12px calc(10px + env(safe-area-inset-bottom));pointer-events:none}
 nav .glass{pointer-events:auto;display:flex;gap:4px;padding:6px;border-radius:26px;width:100%;max-width:560px}
-.tab{flex:1;font:600 12px var(--body);padding:10px 2px;border-radius:20px;border:0;background:transparent;color:var(--mut);cursor:pointer}
+.tab{flex:1;min-width:0;font:600 11.5px var(--body);padding:10px 1px;border-radius:20px;border:0;background:transparent;color:var(--mut);cursor:pointer}
 .tab.on{background:#0c0c0e;color:#fff}
 details>summary{cursor:pointer;list-style:none}
 details>summary::-webkit-details-marker{display:none}
@@ -113,6 +113,8 @@ ul.why,ol.why{margin:8px 0 0;padding-left:20px;font-size:14px}
 .verdict{margin:12px 0 0;font-size:16px;line-height:1.35}ul.why li,ol.why li{margin:0 0 8px}
 .chip.auto{border-style:dashed}
 .chip.sm{font-size:12px;padding:5px 11px}
+.trbar{position:sticky;top:8px;z-index:6;display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 0 12px;border-radius:18px;background:#ecedf0;border:1px solid rgba(0,0,0,.1);box-shadow:0 6px 18px rgba(0,0,0,.16)}
+.trbar .grow{overflow-wrap:anywhere}
 .sbox{width:100%;box-sizing:border-box;font:500 16px var(--body);padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.82);color:var(--text);outline:none;-webkit-appearance:none;appearance:none}
 .sbox:focus{border-color:#0c0c0e;box-shadow:0 0 0 3px rgba(12,12,14,.1)}
 .dim{opacity:.55}
@@ -124,6 +126,7 @@ ul.why,ol.why{margin:8px 0 0;padding-left:20px;font-size:14px}
 
 /* Modo oscuro: sigue la configuración del teléfono. Fondo gris muy oscuro, tarjetas gris oscuro, y lo que era negro pasa a un gris más claro. */
 @media (prefers-color-scheme:dark){
+.trbar{background:#2a2b2f;border-color:rgba(255,255,255,.14)}
 :root{--ink:#f1f2f4;--bg:#121315;--text:#ececef;--mut:#9b9ea7;--line:rgba(255,255,255,.12);--amber:#ececef;--good:#ececef;--warn:#b8bac1;--bad:#ececef;color-scheme:dark}
 body{background-image:linear-gradient(115deg,#1c1d20 0%,#111214 22%,#191a1d 38%,#27282c 58%,#131416 74%,#222326 100%)}
 .glass{background:linear-gradient(145deg,rgba(255,255,255,.11),rgba(255,255,255,.04) 50%,rgba(255,255,255,.08));border:1px solid rgba(255,255,255,.14);
@@ -171,7 +174,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',tro:{f:0,g:[],q:[]}};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 
 const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'], MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -243,7 +246,7 @@ function exp(p){
   const w=[[p.s,.30],[p.l15,.25],[p.l30,.15],[p.l7,.10],[p.pr,.20]]; let a=0,b=0;
   for(const [v,wt] of w){ if(v!=null){a+=v*wt;b+=wt;} } return b?a/b:0;
 }
-const avail=p=>(p.inj==='O'||p.inj==='IR'||p.inj==='SUS')?0:(p.inj==='DTD'?st.dtd:1);
+const avail=p=>p.avl!=null?p.avl:((p.inj==='O'||p.inj==='IR'||p.inj==='SUS')?0:(p.inj==='DTD'?st.dtd:1));
 function ini(n){const w=n.replace(/[.'’]/g,'').split(/\s+/);return ((w[0]||'')[0]||'')+((w[w.length-1]||'')[0]||'')}
 function av(p,c){return `<div class="av ${c||''}">${esc(ini(p.n))}${p.id?`<img src="https://a.espncdn.com/i/headshots/nba/players/full/${p.id}.png" alt="" loading="lazy" onerror="this.remove()">`:''}</div>`}
 function mkP(a){const p={n:a[0],t:a[1],slot:a[2],inj:a[3],pos:a[4],s:a[5],gp:a[6],l7:a[7],l15:a[8],l30:a[9],pr:a[10],mn:a[11],id:a[12]};p.e=exp(p);return p}
@@ -361,11 +364,17 @@ function header(){
 
 /* ---------- ajuste chico por rival (máx ±4%): lo que permite el rival y el ritmo del juego, con datos de ESPN ---------- */
 function tmLg(){const T=S.tm;if(!T)return 0;if(T._lg)return T._lg;const v=Object.values(T).filter(Array.isArray).map(x=>x[0]);return T._lg=v.length?v.reduce((a,b)=>a+b,0)/v.length:0}
+let _mc=null,_mcS=null;
 function mf(p,day){
-  const T=S.tm,lg=tmLg(); if(!T||!lg)return 1;
-  const g=game(p.t,day); if(!g)return 1;
-  const a=T[p.t], b=T[g.opp.replace(/^(vs |@)/,'')]; if(!Array.isArray(a)||!Array.isArray(b))return 1;
-  return Math.max(0.96,Math.min(1.04,1+0.5*(b[1]/lg-1)+0.3*((b[0]+b[1])/(a[0]+a[1])-1)));
+  if(_mcS!==S||!_mc){_mc=new Map();_mcS=S}
+  const k=p.t+'|'+day; let r=_mc.get(k); if(r!==undefined)return r;
+  r=1;
+  const T=S.tm,lg=tmLg(), g=T&&lg?game(p.t,day):null;
+  if(g){
+    const a=T[p.t], b=T[g.opp.replace(/^(vs |@)/,'')];
+    if(Array.isArray(a)&&Array.isArray(b))r=Math.max(0.96,Math.min(1.04,1+0.5*(b[1]/lg-1)+0.3*((b[0]+b[1])/(a[0]+a[1])-1)));
+  }
+  _mc.set(k,r);return r;
 }
 /* ---------- alineación de un día con candados ----------
    Como bestDay, pero: los titulares que ya empezaron no se mueven y los de banca que ya empezaron no suben;
@@ -404,6 +413,24 @@ function planDay(R,day,o){
   const assign=[...fixed]; let m=bm;
   for(let i=n-1;i>=0;i--){ const s=_chB[i*M+m]; if(s>=0){assign.push({p:pool[i].p,slot:SLOTS[s][0],v:pool[i].v}); m^=1<<s;} }
   return {tot:assign.reduce((a,x)=>a+x.v,0),assign,cands:pool.length+fixed.length};
+}
+/* mejor alineación de un día, solo el total: como el valor de un jugador no depende del espacio, basta meter a los mejores
+   uno por uno si todavía caben (emparejamiento por rutas aumentantes). Da el mismo total que planDay sin candados. */
+const _fo=new Int8Array(SLOTS.length),_fs=new Uint8Array(SLOTS.length);
+function _aug(i,c){const sl=c[i].sl;for(let k=0;k<sl.length;k++){const s=sl[k];if(_fs[s])continue;_fs[s]=1;if(_fo[s]<0||_aug(_fo[s],c)){_fo[s]=i;return true}}return false}
+function fastDay(R,day){
+  const c=[];
+  for(const p of R){
+    if(p.slot==='IR')continue;
+    if(!game(p.t,day))continue;
+    if(p.from&&day<p.from)continue;
+    const v=p.e*avail(p)*mf(p,day); if(v<=0)continue;
+    c.push({v,sl:slotsFor(p)});
+  }
+  c.sort((a,b)=>b.v-a.v); _fo.fill(-1);
+  let tot=0,n=0;
+  for(let i=0;i<c.length&&n<SLOTS.length;i++){_fs.fill(0);if(_aug(i,c)){tot+=c[i].v;n++}}
+  return tot;
 }
 /* qué cambiar en tu alineación de un día: quién sube, quién pasa de espacio, a quién sentar y por quién */
 function lineupPlan(R,day){
@@ -1105,7 +1132,483 @@ function minasView(){
   const tabs=`<div class="chips" style="margin-bottom:12px"><button class="chip ${st.mt==='gold'?'on':''}" data-mt="gold">Minas de oro</button><button class="chip ${st.mt==='radar'?'on':''}" data-mt="radar">Mi radar</button></div>`;
   return tabs+(st.mt==='radar'?radarView():goldView()+gapGold());
 }
-const TABS=[['roster','Roster'],['liga','Liga'],['agents','Agentes'],['plan','Plan'],['gold','Minas']];
+
+/*TR-START*/
+
+/* ================= TRAITS: intercambios con tus compañeros =================
+   Cada intercambio (hasta 2x2) se mide con el mismo tipo de alineación diaria que usa el resto de la app, para los dos equipos:
+   - "esta semana": lo que queda de la semana (o la siguiente si ya casi termina), con promedio reciente.
+   - "largo plazo": por semana, con promedio de temporada y de 30 días, y los lesionados contando solo parte del tiempo.
+   - "cómo lo ve tu amigo": valor por promedio de temporada, por proyección de ESPN y mezcla, sin lesiones ni calendario. */
+const TR_MODES=[['w','Esta semana'],['l','Largo plazo'],['d','Discreta'],['p','Pareja'],['o','Mis ofertas']];
+const TR_TOL={s:0.99,m:0.97,x:0.93};      // qué tan justo debe verse para él: muy discreta · moderada · máxima
+const TR_EPS=8;                            // pts por semana: por debajo de esto es ruido (la semana de un equipo suma ≈1,200)
+const TR_PER=9, TR_KEEP=30;
+const TR_ACC=['Baja','Media','Buena','Alta'];
+let _tc=null;
+function trSig(){
+  const r=S.teams.map(t=>t.r.map(a=>a[0]+a[2]+a[3]+a[6]).join(',')).join(';');
+  const g=Object.keys(S.sched).sort().map(d=>d+(S.sched[d]||[]).length).join(',');
+  return [st.dtd,[...st.prot].sort().join(','),todayKey(),S.mu,r,g,(S.fa[0]||[])[0],S.rs||'',S.ir==null?'':S.ir,JSON.stringify(S.op||'')].join('|');
+}
+let _tcT=0;
+const trTouch=()=>{_tcT=0};                  // se llama al dibujar: así los cambios de datos o de intocables se notan al momento
+function trCache(){                          // la firma es cara: se revisa como mucho una vez por segundo
+  const t=typeof performance!=='undefined'?performance.now():Date.now();
+  if(_tc&&t-_tcT<1000)return _tc;
+  _tcT=t;const k=trSig();if(_tc&&_tc.k===k)return _tc;
+  return _tc={k,t:{},pair:{},ex:new Map(),res:{},job:{},hor:null,ge:null,sub:{}};
+}
+function trLim(){let m=0;for(const t of S.teams)m=Math.max(m,t.r.length);return S.rs||Math.max(14,m)}
+const trIrCap=()=>S.ir!=null?S.ir:1;
+const stN=id=>{const l=S.teams.map(t=>[t.id,(t.rec||'0-0').split('-').map(Number)]);l.sort((a,b)=>(b[1][0]-a[1][0])||(a[1][1]-b[1][1]));return l.findIndex(x=>x[0]===id)+1};
+let _tg=null,_tgS=null;
+function teamGames(){                       // partidos jugados por cada equipo de la NBA ≈ el máximo que ha jugado alguno de sus jugadores
+  if(_tg&&_tgS===S)return _tg;const m={};
+  const add=(t,gp)=>{if(gp!=null&&(m[t]==null||gp>m[t]))m[t]=gp};
+  for(const t of S.teams)for(const a of t.r)add(a[1],a[6]);
+  for(const a of S.fa)add(a[1],a[5]);for(const a of (S.fs||[]))add(a[1],a[5]);
+  _tg=m;_tgS=S;return m;
+}
+const isOut=p=>p.inj==='O'||p.inj==='IR'||p.inj==='SUS';
+function ltAvail(p){                        // cuánto del resto de la temporada esperas que juegue
+  const tg=Math.max(8,teamGames()[p.t]||p.gp||8),r=Math.max(0,Math.min(1,(p.gp||0)/tg));
+  if(isOut(p))return 0.25+0.55*r;           // fuera: no sé cuándo vuelve; si ya se perdió casi todo, es más probable que sea largo
+  if(p.inj==='DTD')return 0.9;
+  return 0.85+0.15*r;                       // los que ya se han perdido muchos partidos pesan un poco menos
+}
+const eLT=p=>{let a=0,b=0;for(const [v,w] of [[p.s,.35],[p.l30,.25],[p.pr,.25],[p.l15,.10],[p.l7,.05]])if(v!=null){a+=v*w;b+=w}return b?a/b:0};
+const asLT=p=>({...p,e:eLT(p),avl:ltAvail(p),slot:p.slot==='IR'?'BE':p.slot});
+const slotBE=p=>p.slot==='BE'?p:{...p,slot:'BE'};
+const pvOne=(p,v)=>{const s=p.s!=null?p.s:(p.pr!=null?p.pr:p.e),r=p.pr!=null?p.pr:s,x=v==='s'?s:v==='r'?r:(s+r)/2;return Math.pow(Math.max(x,0)/30,1.3)*30};
+function trEnt(p){return {n:p.n,w:p,l:asLT(p),p,ir:p.slot==='IR',out:isOut(p),pv:{s:pvOne(p,'s'),r:pvOne(p,'r'),m:pvOne(p,'m')}}}
+const trIn=e=>({n:e.n,w:slotBE(e.w),l:e.l,p:e.p,ir:false,out:e.out,pv:e.pv});
+
+function trHor(){
+  const C=trCache();if(C.hor)return C.hor;
+  const c=horizon('c'),n=horizon('n'),useC=c.length>=3,wk=useC?c:n,lt=[...c,...n];
+  return C.hor={c,n,wk,lt,wkMu:useC?S.mu:S.mu+1,wkLab:useC?'el resto de la semana '+S.mu:'la semana '+(S.mu+1),k:7/Math.max(1,lt.length),wkK:7/Math.max(1,wk.length)};
+}
+function tvW(E){const H=trHor(),R=E.map(e=>e.w);let t=0;for(const d of H.wk)t+=fastDay(R,d);return t}
+function tvL(E){const H=trHor(),R=E.map(e=>e.l);let t=0;for(const d of H.lt)t+=fastDay(R,d);return t*H.k}
+const nonIR=E=>{let n=0;for(const e of E)if(!e.ir)n++;return n};
+
+function trTeam(tid){
+  const C=trCache();if(C.t[tid])return C.t[tid];
+  const E=roster(team(tid)).map(trEnt),T={id:tid,E,by:{},size:E.length,n0:nonIR(E)};
+  E.forEach(e=>T.by[e.n]=e);
+  T.W=tvW(E);T.L=tvL(E);T.lossW={};T.lossL={};
+  for(const e of E){const R=E.filter(x=>x!==e);T.lossW[e.n]=T.W-tvW(R);T.lossL[e.n]=T.L-tvL(R)}
+  const prot=tid===S.me?st.prot:new Set();
+  T.cheap=E.filter(e=>!e.ir&&!prot.has(e.n)).map(e=>({n:e.n,w:T.lossW[e.n],l:T.lossL[e.n]})).sort((a,b)=>a.l-b.l);
+  // agentes que llenarían un lugar libre (sin waivers, sanos)
+  const H=trHor(),have=new Set(E.map(e=>e.n));
+  if(!C.ge){C.ge=faPool().filter(f=>f.ws!=='W'&&f.gp>=5&&avail(f)>0&&f.inj!=='O')
+    .map(f=>({f,v:eLT(f)*H.lt.reduce((a,d)=>a+(game(f.t,d)?1:0),0)})).sort((a,b)=>b.v-a.v).slice(0,10).map(x=>trEnt({...x.f,slot:'BE'}))}
+  T.rg=C.ge.filter(f=>!have.has(f.n)).map(f=>({f,gW:tvW(E.concat([f]))-T.W,gL:tvL(E.concat([f]))-T.L})).sort((a,b)=>b.gL-a.gL).slice(0,5);
+  return C.t[tid]=T;
+}
+function trPair(fid){                        // lo que cada jugador de él me suma a mí, y cada uno mío a él, sin mirar el tope de roster
+  const C=trCache();if(C.pair[fid])return C.pair[fid];
+  const A=trTeam(S.me),B=trTeam(fid),P={qa:{},ga:{}};
+  for(const q of B.E){const e=trIn(q),E2=A.E.concat([e]);P.qa[q.n]={w:tvW(E2)-A.W,l:tvL(E2)-A.L}}
+  for(const g of A.E){const e=trIn(g),E2=B.E.concat([e]);P.ga[g.n]={w:tvW(E2)-B.W,l:tvL(E2)-B.L}}
+  return C.pair[fid]=P;
+}
+/* cuerpos de más o de menos tras el cambio: usa el espacio de IR si hay lesionados, suelta a quien menos pierdes, o llena con el mejor agente */
+function trSettle(T,E1,lim,prot,extra){
+  let E=E1.slice();const drops=[],adds=[],toIR=[],cap=lim-trIrCap(),irCap=trIrCap();
+  while(nonIR(E)>cap&&E.length-nonIR(E)<irCap){
+    const c=E.filter(e=>!e.ir&&isOut(e.p));
+    if(!c.length)break;
+    c.sort((a,b)=>b.l.e*b.l.avl-a.l.e*a.l.avl);const x=c[0],y={...x,ir:true,w:{...x.w,slot:'IR'}};
+    E=E.map(e=>e===x?y:e);toIR.push(x.n);
+  }
+  while(nonIR(E)>cap){
+    const est=e=>T.lossL[e.n]!=null?T.lossL[e.n]:(extra[e.n]!=null?extra[e.n]:0);
+    const c=E.filter(e=>!e.ir&&!prot.has(e.n)).sort((a,b)=>est(a)-est(b)).slice(0,3);
+    if(!c.length)break;
+    let best=null;for(const e of c){const E2=E.filter(x=>x!==e),v=tvL(E2);if(!best||v>best.v)best={e,v,E2}}
+    drops.push(best.e);E=best.E2;
+  }
+  while(nonIR(E)<T.n0){
+    const have=new Set(E.map(e=>e.n)),b0=tvL(E);let best=null;
+    for(const x of T.rg){if(have.has(x.f.n))continue;const v=tvL(E.concat([x.f]));if(!best||v>best.v)best={f:x.f,v}}
+    if(!best||best.v-b0<0.05)break;
+    adds.push(best.f);E=E.concat([best.f]);
+  }
+  return {E,drops,adds,toIR,bad:nonIR(E)>cap};
+}
+/* qué tan justo lo ve él: lo que recibe (lo mío) entre lo que da (lo suyo), por tres criterios */
+function trRho(G,Q){
+  const o={s:0,r:0,m:0,min:9};
+  for(const v of ['s','r','m']){
+    let a=0,mn=1e9,b=0;
+    for(const e of G){const x=e.pv[v];a+=x;if(x<mn)mn=x}
+    if(G.length>Q.length)a-=0.25*mn;                    // si recibe más cuerpos de los que da, tiene que soltar a alguien: el último vale menos
+    for(const e of Q)b+=e.pv[v];
+    const r=b>0?a/b:9;o[v]=r;if(r<o.min)o.min=r;
+  }
+  return o;
+}
+const trSubsets=arr=>{const o=arr.map(x=>[x]);for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++)o.push([arr[i],arr[j]]);return o};
+function trProx(A,B,P,G,Q){
+  let myW=0,myL=0,frW=0,frL=0;
+  for(const q of Q){const a=P.qa[q.n];myW+=a.w;myL+=a.l;frW-=B.lossW[q.n];frL-=B.lossL[q.n]}
+  for(const g of G){const a=P.ga[g.n];frW+=a.w;frL+=a.l;myW-=A.lossW[g.n];myL-=A.lossL[g.n]}
+  let dd=Q.length-G.length;
+  if(dd>0){for(const c of A.cheap){if(dd<=0)break;if(G.some(g=>g.n===c.n))continue;myW-=c.w;myL-=c.l;dd--}}
+  else if(dd<0){for(let i=0;i<-dd&&i<A.rg.length;i++){myW+=A.rg[i].gW;myL+=A.rg[i].gL}}
+  let de=G.length-Q.length;
+  if(de>0){for(const c of B.cheap){if(de<=0)break;if(Q.some(q=>q.n===c.n))continue;frW-=c.w;frL-=c.l;de--}}
+  else if(de<0){for(let i=0;i<-de&&i<B.rg.length;i++){frW+=B.rg[i].gW;frL+=B.rg[i].gL}}
+  return {myW,myL,frW,frL};
+}
+const accLv=(rho,out)=>{let lv=rho>=1.03?3:rho>=0.98?2:rho>=0.93?1:0;return out?Math.max(0,lv-2):lv};   // si le doy a un lesionado, lo ve en ESPN: pesa mucho
+const pAcc=(lv,fL)=>Math.min(0.9,[0.08,0.3,0.55,0.8][lv]+(fL>0?0.1:0));                                 // chance estimada de que acepte
+const trOpp=fid=>{const H=trHor(),m=(S.op||{})[String(H.wkMu)];return m?m[String(S.me)]===fid:false};
+const trCont=fid=>stN(fid)<=3;
+
+/* evaluación exacta de un intercambio: tu roster y el suyo después del cambio (con quién suelta cada uno y a quién agregan) */
+function trEval(fid,Gn,Qn){
+  const C=trCache(),key=fid+'|'+[...Gn].sort().join(',')+'>'+[...Qn].sort().join(',');
+  if(C.ex.has(key))return C.ex.get(key);
+  const A=trTeam(S.me),B=trTeam(fid),P=trPair(fid),lim=trLim(),H=trHor();
+  const G=Gn.map(n=>A.by[n]),Q=Qn.map(n=>B.by[n]);
+  const Ea=A.E.filter(e=>!Gn.includes(e.n)).concat(Q.map(trIn)),exA={};Q.forEach(q=>exA[q.n]=P.qa[q.n].l);
+  const sa=trSettle(A,Ea,lim,st.prot,exA);
+  const Eb=B.E.filter(e=>!Qn.includes(e.n)).concat(G.map(trIn)),exB={};G.forEach(g=>exB[g.n]=P.ga[g.n].l);
+  const sb=trSettle(B,Eb,lim,new Set(),exB);
+  const r={key,fid,G:Gn,Q:Qn,gW:tvW(sa.E)-A.W,gL:tvL(sa.E)-A.L,fW:tvW(sb.E)-B.W,fL:tvL(sb.E)-B.L,
+    aDrops:sa.drops.map(e=>e.n),aAdds:sa.adds.map(e=>e.n),aIR:sa.toIR,bDrops:sb.drops.map(e=>e.n),bAdds:sb.adds.map(e=>e.n),bIR:sb.toIR,Ea:sa.E,Eb:sb.E,
+    bad:sa.bad||sb.bad,rho:trRho(G,Q),opp:trOpp(fid),cont:trCont(fid)};
+  r.gWn=r.gW*H.wkK;r.fWn=r.fW*H.wkK;r.comb=(r.gWn+r.gL)/2;
+  const fl=[];
+  for(const g of G)if(isOut(g.p))fl.push({k:'inj',n:g.n,t:g.n+' está fuera por lesión: tu amigo lo puede notar.'});
+  for(const g of G)if(g.p.inj==='DTD')fl.push({k:'dtd',n:g.n,t:g.n+' está día a día.'});
+  for(const g of G)if((g.p.gp||0)<8&&!isOut(g.p))fl.push({k:'gp',n:g.n,t:g.n+' lleva pocos partidos ('+(g.p.gp||0)+'): su promedio es poco confiable.'});
+  r.flags=fl;
+  r.acc=accLv(r.rho.min,G.some(g=>g.out));
+  r.pAcc=pAcc(r.acc,r.fL);
+  C.ex.set(key,r);return r;
+}
+/* ¿pasa los filtros de cada modo? y con qué puntaje se ordena (null = no pasa) */
+function trPass(r,mode,strict){
+  if(r.bad)return null;
+  const tol=TR_TOL[st.trd||'m'],E=TR_EPS;
+  if(mode==='w')return r.rho.min>=0.93&&r.gW>=E&&r.gL>=-2*E?(r.gW-(r.opp?r.fW:0))*r.pAcc:null;
+  if(mode==='l')return r.rho.min>=0.93&&r.gL>=E&&r.gWn>=-3*E?(r.gL-(r.cont?0.1*Math.max(0,r.fL):0))*r.pAcc:null;
+  if(mode==='d')return r.rho.min>=tol&&r.comb>=0.75*E&&r.gWn>=-E&&r.gL>=-E&&!r.flags.some(f=>f.k==='inj')?r.comb*r.pAcc*(r.flags.some(f=>f.k==='gp')?0.85:1):null;
+  if(mode==='p'){
+    const lo=strict?0.4*E:-0.2*E,wl=strict?-E:-2*E;
+    return r.rho.min>=0.93&&r.rho.m>=0.95&&r.rho.m<=1.08&&r.gL>=lo&&r.fL>=lo&&r.gWn>=wl&&r.fWn>=wl?Math.min(r.gL,r.fL)-0.5*Math.abs(r.gL-r.fL):null;
+  }
+  return null;
+}
+function trProxScore(H,mode,p,rho,opp,cont,out){
+  const wn=p.myW*H.wkK,tol=TR_TOL[st.trd||'m'],E=TR_EPS,pa=pAcc(accLv(rho.min,out),p.frL);
+  if(mode==='w')return rho.min<0.90||p.myL<-3*E?null:(p.myW-(opp?p.frW:0))*pa;
+  if(mode==='l')return rho.min<0.90||wn<-4*E?null:(p.myL-(cont?0.1*Math.max(0,p.frL):0))*pa;
+  if(mode==='d')return out||rho.min<tol-0.02||wn<-1.5*E||p.myL<-1.5*E?null:(wn+p.myL)/2*pa;
+  if(mode==='p')return rho.min<0.9||rho.m<0.93||rho.m>1.10||Math.min(p.myL,p.frL)<-0.5*E||Math.min(p.myW,p.frW)*H.wkK<-1.5*E?null:Math.min(p.myL,p.frL)-0.5*Math.abs(p.myL-p.frL);
+  return null;
+}
+/* candidatos baratos (sin armar alineaciones nuevas): los mejores por modo y compañero */
+function trCands(mode){
+  const C=trCache(),A=trTeam(S.me),out=[];
+  if(!C.sub.give)C.sub.give=trSubsets(A.E.filter(e=>!st.prot.has(e.n)));
+  for(const t of S.teams){
+    if(t.id===S.me)continue;
+    const B=trTeam(t.id),P=trPair(t.id),opp=trOpp(t.id),cont=trCont(t.id),list=[],H=trHor();
+    if(!C.sub[t.id])C.sub[t.id]=trSubsets(B.E);
+    for(const G of C.sub.give)for(const Q of C.sub[t.id]){
+      const rho=trRho(G,Q);
+      if(rho.min<0.88)continue;
+      const sc0=trProxScore(H,mode,trProx(A,B,P,G,Q),rho,opp,cont,G[0].out||(G.length>1&&G[1].out));
+      if(sc0==null)continue;
+      list.push({fid:t.id,G,Q,sc:sc0});
+    }
+    list.sort((a,b)=>b.sc-a.sc);
+    out.push(...diversify(list,TR_PER,x=>x.G.map(e=>e.n),x=>x.Q.map(e=>e.n),3).map(x=>({fid:x.fid,G:x.G.map(e=>e.n),Q:x.Q.map(e=>e.n),sc:x.sc})));
+  }
+  return out;
+}
+function diversify(list,max,fg,fq,cap){
+  const cg={},cq={},res=[];
+  for(const x of list){
+    if(res.length>=max)break;
+    const g=fg(x),q=fq(x);
+    if(g.some(n=>(cg[n]||0)>=cap)||q.some(n=>(cq[n]||0)>=cap))continue;
+    g.forEach(n=>cg[n]=(cg[n]||0)+1);q.forEach(n=>cq[n]=(cq[n]||0)+1);res.push(x);
+  }
+  return res;
+}
+function trFinish(mode,cands){
+  const ev=cands.map(c=>trEval(c.fid,c.G,c.Q)),L=[];
+  for(const r of ev){const s=trPass(r,mode,true);if(s!=null)L.push({r,s})}
+  if(mode==='p'&&L.length<3){for(const r of ev){if(L.some(x=>x.r===r))continue;const s=trPass(r,mode,false);if(s!=null)L.push({r,s,loose:true})}}
+  L.sort((a,b)=>(!!a.loose-!!b.loose)||b.s-a.s);
+  const byF={},out=[];                              // variedad dentro de cada compañero: no repetir el mismo jugador más de 2 veces
+  for(const x of L)(byF[x.r.fid]=byF[x.r.fid]||[]).push(x);
+  for(const f in byF)out.push(...diversify(byF[f],6,x=>x.r.G,x=>x.r.Q,2));
+  out.sort((a,b)=>(!!a.loose-!!b.loose)||b.s-a.s);
+  return {list:out.slice(0,TR_KEEP).map(x=>({...x.r,score:x.s,loose:!!x.loose})),n:cands.length};
+}
+const trResKey=mode=>mode+'|'+(mode==='d'?(st.trd||'m'):'');
+function trRankSync(mode){
+  const C=trCache(),k=trResKey(mode);if(C.res[k])return C.res[k];
+  return C.res[k]=trFinish(mode,trCands(mode));
+}
+/* versión por pedazos para no congelar el celular */
+function trRankAsync(mode,cb){
+  const C=trCache(),k=trResKey(mode);if(C.res[k]){cb();return}
+  const j=C.job[k];if(j&&!j.done)return;
+  const job=C.job[k]={i:0,n:0,done:false,pct:0,cands:null};
+  const now=()=>typeof performance!=='undefined'?performance.now():Date.now();
+  const step=()=>{
+    if(_tc!==C)return;                               // los datos cambiaron: este cálculo ya no sirve
+    try{
+      if(!job.cands){job.cands=trCands(mode);job.n=job.cands.length;setTimeout(step,0);return}
+      const t0=now();
+      while(job.i<job.n&&now()-t0<35){const c=job.cands[job.i++];trEval(c.fid,c.G,c.Q)}
+      job.pct=job.n?job.i/job.n:1;
+      if(job.i<job.n){const e=document.getElementById('trpct');if(e)e.textContent=Math.round(job.pct*100)+'%';setTimeout(step,0);return}
+      C.res[k]=trFinish(mode,job.cands);job.done=true;cb();
+    }catch(err){job.done=true;job.err=String(err&&err.message||err);cb()}
+  };
+  setTimeout(step,30);
+}
+/* contraofertas: variantes de una oferta que a ti te dejan mejor y que a él le siguen pareciendo razonables */
+function trVariants(fid,G,Q){
+  const A=trTeam(S.me),B=trTeam(fid),give=A.E.map(e=>e.n).filter(n=>!st.prot.has(n)||G.includes(n)),get=B.E.map(e=>e.n),out=[];
+  const add=(g,q,txt)=>{if(!g.length||!q.length||g.length>2||q.length>2)return;out.push({G:g,Q:q,txt})};
+  if(Q.length<2)for(const n of get)if(!Q.includes(n))add(G,[...Q,n],{k:'addq',n});
+  for(const q of Q)for(const n of get)if(!Q.includes(n))add(G,Q.map(x=>x===q?n:x),{k:'swq',n,o:q});
+  for(const g of G)for(const n of give)if(!G.includes(n))add(G.map(x=>x===g?n:x),Q,{k:'swg',n,o:g});
+  if(G.length===2)for(const g of G)add(G.filter(x=>x!==g),Q,{k:'rmg',n:g});
+  if(Q.length===2)for(const q of Q)add(G,Q.filter(x=>x!==q),{k:'rmq',n:q});
+  return out;
+}
+function trCounters(fid,G,Q){                   // se prefiltra con la estimación barata y solo los mejores pasan al cálculo exacto
+  const A=trTeam(S.me),P=trPair(fid),B=trTeam(fid),H=trHor();
+  return trVariants(fid,G,Q).map(v=>{const g=v.G.map(n=>A.by[n]),q=v.Q.map(n=>B.by[n]),rho=trRho(g,q),p=trProx(A,B,P,g,q);return {v,rho,s:(p.myW*H.wkK+p.myL)/2}})
+    .filter(x=>x.rho.min>=0.93).sort((a,b)=>b.s-a.s).slice(0,18).map(x=>x.v);
+}
+function trCounterRes(fid,base,variants){
+  const rs=variants.map(v=>({v,r:trEval(fid,v.G,v.Q)})).filter(x=>!x.r.bad&&x.r.rho.min>=0.93&&x.r.comb>base.comb+0.5*TR_EPS&&x.r.gL>=base.gL-0.25*TR_EPS);
+  rs.sort((a,b)=>b.r.comb-a.r.comb);
+  return diversify(rs.map(x=>({...x,G:x.r.G,Q:x.r.Q})),3,x=>x.G,x=>x.Q,2);
+}
+
+
+/* ---------- pestaña Traits: pantalla ---------- */
+const trSg=x=>(x>=0?'+':'−')+f0(Math.abs(x));
+const trName=id=>tn(team(id));
+const trJoin=a=>a.map(n=>`<b>${esc(n)}</b>`).join(' + ');
+const trGames=(p,days)=>days.reduce((a,d)=>a+(game(p.t,d)?1:0),0);
+function trSaved(){try{const a=JSON.parse(localStorage.getItem('leo_offers')||'[]');return Array.isArray(a)?a:[]}catch(_){return []}}
+function trSaveList(a){try{localStorage.setItem('leo_offers',JSON.stringify(a.slice(0,30)))}catch(_){}}
+function trIso(){const p=etNow();return p.year+'-'+p.month+'-'+p.day}
+function trRules(){
+  const t=S.tr,parts=[];
+  if(t&&t.dl){
+    const [y,m,d]=t.dl.split('-').map(Number),late=trIso()>t.dl;
+    parts.push(late?`<b>Ya pasó la fecha límite de intercambios (${d} ${MO[m-1]}).</b> Revisa en ESPN si todavía se puede.`:`Fecha límite de intercambios: ${d} ${MO[m-1]}.`);
+  }
+  if(t&&t.rev!=null)parts.push(`Revisión de la liga: ${t.rev} h${t.veto!=null?` · vetos para cancelar: ${t.veto}`:''}.`);
+  if(!parts.length)parts.push('Todavía no tengo las reglas de intercambio de tu liga (fecha límite y revisión): confírmalas en ESPN. Tu roster es de '+trLim()+' jugadores.');
+  return parts.join(' ');
+}
+/* una frase con la razón principal de un intercambio */
+function trOne(r){
+  const H=trHor(),A=trTeam(S.me),B=trTeam(r.fid),G=r.G.map(n=>A.by[n]),Q=r.Q.map(n=>B.by[n]),out=[];
+  const gg=G.reduce((a,e)=>a+trGames(e.p,H.wk),0),gq=Q.reduce((a,e)=>a+trGames(e.p,H.wk),0);
+  const qa=Q.reduce((a,e)=>a+e.l.e,0)/Q.length,ga=G.reduce((a,e)=>a+e.l.e,0)/G.length;
+  if(r.aAdds.length&&Q.length<G.length)out.push(`liberas un lugar y lo llenas con ${esc(r.aAdds[0])}`);
+  else if(Q.length>G.length)out.push('te llegan más jugadores que activos das');
+  if(r.aIR.length)out.push(`${esc(r.aIR[0])} pasa a IR y libera un lugar`);
+  if(gq-gg>=2)out.push(`juegan ${gq-gg} partidos más ${H.wkLab}`);
+  else if(gg-gq>=2)out.push(`juegan ${gg-gq} partidos menos ${H.wkLab}`);
+  if(qa-ga>=2)out.push(`lo que recibes rinde ${f1(qa-ga)} más por partido`);
+  else if(ga-qa>=2)out.push(`lo que das rinde ${f1(ga-qa)} más por partido`);
+  return out.length?out.slice(0,2).join(' · ').replace(/^./,c=>c.toUpperCase()):'Mejora el encaje de tu alineación completa.';
+}
+function trRow(r,mode){
+  const f=trName(r.fid);
+  const first=mode==='w'?r.gW:mode==='l'?r.gL:mode==='p'?Math.min(r.gL,r.fL):r.comb;
+  const lab=mode==='w'?'esta semana':mode==='l'?'por semana':mode==='p'?'los dos, por semana':'por semana';
+  const pill=`<span class="pill ${r.acc>=2?'good':'amber'}">Aceptación ${TR_ACC[r.acc].toLowerCase()}</span>`;
+  const risk=r.flags.some(x=>x.k==='inj')?'<span class="pill amber">Lesionado</span>':r.flags.some(x=>x.k==='gp')?'<span class="pill amber">Pocos partidos</span>':'';
+  const opp=r.opp?'<span class="pill amber">Es tu rival</span>':'';
+  return `<div class="item tap" data-tr="${esc(r.key)}"><div class="grow">
+    <div class="note" style="margin-bottom:2px"><b>${esc(f)}</b></div>
+    <div class="nm" style="font-weight:600;font-size:14.5px">Das: ${r.G.map(esc).join(' + ')}</div>
+    <div class="nm" style="font-weight:600;font-size:14.5px">Recibes: ${r.Q.map(esc).join(' + ')}</div>
+    <div class="meta">${trOne(r)}</div>
+    <div class="meta">Tú: semana ${trSg(r.gW)} · largo ${trSg(r.gL)}/sem · ${esc(f)}: ${trSg(r.fW)} · ${trSg(r.fL)}/sem</div>
+    <div style="margin-top:4px">${pill} ${risk} ${opp}</div></div>
+    <div style="text-align:right;min-width:58px"><div class="val">${trSg(first)}</div><div class="note">${lab}</div></div><div class="chev">›</div></div>`;
+}
+const TR_DESC={
+  w:()=>{const H=trHor();return `Lo que más te suma en ${H.wkLab} (${rng(H.wk[0],H.wk[H.wk.length-1])}). Se mide tu alineación completa de los dos equipos, no solo el jugador: partidos, posiciones y a quién tendrías que soltar. Ordenado por lo que ganas multiplicado por la chance de que acepte. No muestro cambios que te dañen más de ${2*TR_EPS} pts por semana a largo plazo.`},
+  l:()=>`Lo que más te suma por semana de aquí a fin de temporada: promedio de temporada y de 30 días (no solo la racha), y los lesionados cuentan solo una parte del tiempo. El calendario es el de las próximas 2 semanas, que es lo único que conozco.`,
+  d:()=>`Cambios que a tu amigo le parecen justos (por promedio de temporada, por proyección de ESPN y por mezcla) pero que a ti te convienen más. No incluyo lesionados que él puede ver en ESPN. Elige qué tan justo debe verse para él:`,
+  p:()=>`Cambios donde los dos mejoran de verdad (en puntos de alineación) y que además se ven justos por nombre y promedio.`
+};
+const TR_EMPTY={
+  w:`No encontré un intercambio que te sume al menos ${TR_EPS} pts esta semana y que tu amigo vea razonable.`,
+  l:`No encontré un intercambio que te sume al menos ${TR_EPS} pts por semana a largo plazo y que tu amigo vea razonable.`,
+  d:`No encontré cambios que se vean parejos para tu amigo y que te convengan. Prueba con la discreción “Máxima” o con el modo Esta semana.`,
+  p:`No encontré cambios donde los dos mejoren.`
+};
+function tradesView(){
+  trTouch();
+  const mode=st.trm||'w',chips=TR_MODES.map(([k,l])=>`<button class="chip ${mode===k?'on':''}" data-trm="${k}">${l}</button>`).join('');
+  const head=`<div class="glass card"><h3>Traits</h3><div class="note" style="margin:6px 0 10px">Intercambios con tus compañeros (hasta 2 por 2). ${esc(trRules())}</div><div class="chips">${chips}</div></div>`;
+  if(mode==='o')return head+offerView();
+  const fr=`<button class="chip ${!st.trf?'on':''}" data-trf="0">Todos</button>`+S.teams.filter(t=>t.id!==S.me).map(t=>`<button class="chip ${st.trf===t.id?'on':''}" data-trf="${t.id}">${esc(tn(t))}</button>`).join('');
+  const dsc=mode==='d'?`<div class="chips" style="margin-top:8px">${[['s','Muy discreta'],['m','Moderada'],['x','Máxima']].map(([k,l])=>`<button class="chip ${(st.trd||'m')===k?'on':''}" data-trd="${k}">${l}</button>`).join('')}</div>`:'';
+  const top=`<div class="glass card"><h3>${esc(TR_MODES.find(x=>x[0]===mode)[1])}</h3><div class="note" style="margin:6px 0 10px">${TR_DESC[mode]()}</div>${dsc}<div class="chips sc" style="margin-top:10px">${fr}</div></div>`;
+  const C=trCache(),k=trResKey(mode),job=C.job[k];
+  if(!C.res[k]){
+    if(job&&job.err)return head+top+`<div class="glass card"><div class="note">No pude calcular los intercambios (${esc(job.err)}). Recarga con ↻.</div></div>`;
+    clearTimeout(window.__tr);window.__tr=setTimeout(()=>trRankAsync(mode,()=>{if(st.tab==='trade'&&(st.trm||'w')===mode)render()}),40);
+    return head+top+`<div class="glass card"><div class="note">Buscando intercambios con tus 5 compañeros… <span id="trpct">${job?Math.round((job.pct||0)*100)+'%':''}</span></div></div>`;
+  }
+  const R=C.res[k],list=R.list.filter(x=>!st.trf||x.fid===st.trf).slice(0,10);
+  const body=list.length?list.map(r=>trRow(r,mode)).join(''):`<div class="note" style="padding:8px 0">${TR_EMPTY[mode]}</div>`;
+  const loose=mode==='p'&&list.some(x=>x.loose)?`<div class="note" style="margin-top:8px">Hay pocos cambios donde los dos mejoran claramente; los últimos son “casi parejos”.</div>`:'';
+  return head+top+`<div class="glass card"><h3>Propuestas</h3><div class="note" style="margin:6px 0 4px">Toca una para ver el desglose. “Aceptación” es una estimación de cómo se ve en números, no de cómo piensa cada amigo. Revisé ${R.n} propuestas finalistas de miles de combinaciones. No cuenta lo que ya podrías ganar con agentes libres.</div>${body}${loose}</div>`;
+}
+
+/* ---------- desglose de un intercambio (sirve para la hoja y para Mis ofertas) ---------- */
+function trWhy(r){
+  const H=trHor(),A=trTeam(S.me),B=trTeam(r.fid),G=r.G.map(n=>A.by[n]),Q=r.Q.map(n=>B.by[n]),b=[],f=trName(r.fid);
+  const gm=e=>{const g=trGames(e.p,H.wk);return `${g} ${g===1?'partido':'partidos'} ${H.wkLab}`};
+  b.push(`Tu mejor alineación pasa de ≈${f0(A.W)} a ≈${f0(A.W+r.gW)} pts en ${H.wkLab} (${trSg(r.gW)}) y suma ${trSg(r.gL)} pts por semana a largo plazo.`);
+  for(const e of Q)b.push(`Recibes a <b>${esc(e.n)}</b>: ≈${f1(e.l.e)} pts por partido a largo plazo (${f1(e.w.e)} con su forma reciente), ${gm(e)}.${isOut(e.p)?' Está fuera por lesión: esta semana no suma.':e.p.inj==='DTD'?' Está día a día.':''}`);
+  for(const e of G)b.push(`Das a <b>${esc(e.n)}</b>: ≈${f1(e.l.e)} pts por partido a largo plazo (${f1(e.w.e)} con su forma reciente), ${gm(e)}.${isOut(e.p)?' Está fuera por lesión.':''}`);
+  if(r.aIR.length)b.push(`<b>${esc(r.aIR.join(', '))}</b> pasa a tu espacio de IR y libera un lugar de tu roster.`);
+  if(r.aDrops.length)b.push(`Tu roster queda lleno: tendrías que soltar a <b>${esc(r.aDrops.join(', '))}</b> (es a quien menos pierdes).`);
+  if(r.aAdds.length)b.push(`Te queda un lugar libre: lo cuento llenado con <b>${esc(r.aAdds.join(', '))}</b>, el mejor agente libre que sume.`);
+  if(r.opp)b.push(`<b>${esc(f)} es tu rival ${H.wkLab}</b>: lo que él gane te lo quita en el marcador, y ya está restado del puntaje de “esta semana”.`);
+  else if(r.cont&&r.fL>0)b.push(`${esc(f)} va entre los primeros de la tabla: lo que gana lo acerca a ti.`);
+  return b;
+}
+function trSeen(r){
+  const A=trTeam(S.me),B=trTeam(r.fid),G=r.G.map(n=>A.by[n]),Q=r.Q.map(n=>B.by[n]),f=trName(r.fid);
+  const sum=(L,fn)=>L.reduce((a,e)=>a+fn(e.p),0);
+  const rows=[['Promedio de la temporada',p=>p.s!=null?p.s:p.e],['Proyección de ESPN',p=>p.pr!=null?p.pr:(p.s!=null?p.s:p.e)]].map(([l,fn])=>{
+    const a=sum(G,fn),b=sum(Q,fn),pc=b>0?(a/b-1)*100:0;
+    return `<tr><td style="text-align:left">${l}</td><td>${f1(a)}</td><td>${f1(b)}</td><td class="y">${pc>=0?'+':'−'}${Math.abs(Math.round(pc))}%</td></tr>`}).join('');
+  const pc=Math.round((r.rho.min-1)*100);
+  return `<div class="note" style="margin:6px 0 8px">Así lo ve ${esc(f)} si solo mira nombre y promedio (no ve lesiones ni calendario). “Recibe” es lo que tú das; “Da”, lo que él te da. “Se ve” es cuánto más o menos recibe de lo que da.</div>
+    <div class="scroll"><table class="wk"><tr><th style="text-align:left">Criterio</th><th>Recibe</th><th>Da</th><th>Se ve</th></tr>${rows}<tr><td style="text-align:left">En conjunto*</td><td></td><td></td><td class="y">${pc>=0?'+':'−'}${Math.abs(pc)}%</td></tr></table></div>
+    <div class="note" style="margin-top:6px">*En el peor de los tres criterios, contando que los estrellas valen más que dos buenos y que recibir más jugadores de los que da lo obliga a soltar a alguien.</div>
+    <div class="row" style="margin-top:10px"><span class="pill ${r.acc>=2?'good':'amber'}">Aceptación estimada: ${TR_ACC[r.acc].toLowerCase()}</span></div>
+    <div class="note" style="margin-top:8px">Lo que realmente le cambia a ${esc(f)}: ${trSg(r.fW)} pts ${trHor().wkLab} y ${trSg(r.fL)} por semana a largo plazo.${r.bDrops.length?` Tendría que soltar a ${esc(r.bDrops.join(', '))}.`:''}${r.bAdds.length?` Le queda un lugar libre y lo llenaría con ${esc(r.bAdds.join(', '))}.`:''}${r.bIR.length?` ${esc(r.bIR.join(', '))} pasaría a su IR.`:''}</div>`;
+}
+function trPitch(r){
+  const A=trTeam(S.me),B=trTeam(r.fid),G=r.G.map(n=>A.by[n]),Q=r.Q.map(n=>B.by[n]),f=trName(r.fid),H=trHor();
+  const jn=a=>a.length>1?a.slice(0,-1).join(', ')+' y '+a[a.length-1]:a[0];
+  const s=L=>L.reduce((a,e)=>a+(e.p.s!=null?e.p.s:e.p.e),0),ps=[];
+  ps.push(`Oye ${f}, ¿qué tal si cambiamos? Tú me das ${jn(r.Q)} y yo te doy ${jn(r.G)}.`);
+  if(G.length===Q.length&&s(G)>s(Q))ps.push(`${jn(r.G)} ${G.length>1?'juntos promedian':'promedia'} ${f1(s(G))} pts por partido en la temporada contra ${f1(s(Q))} ${Q.length>1?'de los que me das':'de lo que me das'}.`);
+  else if(G.length>Q.length)ps.push(`Te doy más jugadores para que tengas más profundidad.`);
+  if(r.fW>=TR_EPS)ps.push(`Según mis cuentas te sube ≈${f0(r.fW)} pts ${H.wkLab}.`);
+  return ps.join(' ');
+}
+function trDetail(r,key){
+  const H=trHor(),A=trTeam(S.me),f=trName(r.fid);
+  const days=H.wk.map(d=>{const a=fastDay(A.E.map(e=>e.w),d),b=fastDay(r.Ea.map(e=>e.w),d);return `<tr><td style="text-align:left">${dl(d)}</td><td>${f0(a)}</td><td>${f0(b)}</td><td class="y">${trSg(b-a)}</td></tr>`}).join('');
+  const warn=[...r.flags.map(x=>x.t)];
+  for(const n of r.G)if(st.prot.has(n))warn.push(`${n} es uno de tus intocables.`);
+  if(r.bad)warn.push('Después del cambio tu roster no cabe y no hay a quién soltar sin tocar tus intocables.');
+  const pitch=trPitch(r);
+  return `<div class="glass card"><h3>Por qué</h3><ul class="why">${trWhy(r).map(x=>`<li>${x}</li>`).join('')}</ul></div>
+    ${warn.length?`<div class="glass card"><h3>Ojo</h3><ul class="why">${warn.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+    <div class="glass card"><h3>Cómo lo ve ${esc(f)}</h3>${trSeen(r)}</div>
+    <div class="glass card"><h3>Día por día</h3><div class="note" style="margin:6px 0 8px">Puntos esperados de tu mejor alineación en ${H.wkLab}, sin el cambio y con el cambio (con la forma reciente de cada jugador).</div><div class="scroll"><table class="wk"><tr><th style="text-align:left">Día</th><th>Sin</th><th>Con</th><th>Dif.</th></tr>${days}</table></div></div>
+    <div class="glass card"><h3>Cómo proponérselo</h3><div class="note" style="margin:6px 0 8px">Solo usa datos reales de los jugadores. Cámbialo a tu estilo.</div><div id="trpitch" style="user-select:all;-webkit-user-select:all;font-size:14.5px;line-height:1.4">${esc(pitch)}</div><div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="chip" data-tcopy="1">Copiar mensaje</button><button class="chip" data-tload="${esc(key)}">Ajustar en Mis ofertas</button></div></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">${[...r.G,...r.Q].map(n=>`<button class="chip" data-pl="${esc(n)}">Ver a ${esc(n)}</button>`).join('')}</div>`;
+}
+function tradeSheet(key){
+  const C=trCache();let r=C.ex.get(key);
+  if(!r){const i=key.indexOf('|'),j=key.indexOf('>');r=trEval(Number(key.slice(0,i)),key.slice(i+1,j).split(',').filter(Boolean),key.slice(j+1).split(',').filter(Boolean))}
+  const H=trHor(),f=trName(r.fid),A=trTeam(S.me),B=trTeam(r.fid);
+  const side=(L,T,t)=>L.map(n=>{const e=T.by[n],p=e.p;return `<div class="row" style="gap:10px;margin-top:8px" data-pl="${esc(n)}">${av(p,'sm')}<div class="grow"><div class="nm">${esc(n)} ${badge(p.inj)}</div><div class="meta">${p.t} · ${esc(p.pos)} · prom ${f1(p.s)} · ${f0(p.mn)} min</div></div></div>`}).join('');
+  return `<div class="glass card"><h3>Intercambio con ${esc(f)}</h3>
+    <div class="note" style="margin-top:8px">Tú das</div>${side(r.G,A)}
+    <div class="note" style="margin-top:14px">Recibes</div>${side(r.Q,B)}
+    <div class="hero" style="margin-top:14px"><div class="stat"><div class="lab">${H.wkLab.replace(/^./,c=>c.toUpperCase())}</div><div class="big">${trSg(r.gW)}</div><div class="note">pts esperados</div></div><div class="stat"><div class="lab">Largo plazo</div><div class="big">${trSg(r.gL)}</div><div class="note">pts por semana</div></div></div></div>`+trDetail(r,key);
+}
+
+/* ---------- Mis ofertas: meto lo que me proponen y lo analizo ---------- */
+function trVerdict(r){
+  const H=trHor(),E=TR_EPS,w=r.gWn,l=r.gL,sw=w>=E?1:w<=-E?-1:0,sl=l>=E?1:l<=-E?-1:0;
+  if(r.bad)return {t:'bad',h:'No se puede hacer así.',s:'Después del cambio tu roster no cabe en el límite y no tienes a quién soltar sin tocar a tus intocables.'};
+  if(sl>0&&sw>=0)return {t:'good',h:'Acéptala.',s:`Te suma ${f0(l)} pts por semana a largo plazo${sw>0?` y ${f0(r.gW)} en ${H.wkLab}`:' y esta semana no te cuesta'}.`};
+  if(sl>0)return {t:'mid',h:`Te conviene a largo plazo, pero ${H.wkLab} pierdes ${f0(-r.gW)}.`,s:`A largo plazo ganas ${f0(l)} pts por semana. Acéptala si puedes aguantar esa semana${r.opp?' (ojo: es tu rival)':''}.`};
+  if(sl===0&&sw>0)return {t:'good',h:`Te ayuda ${H.wkLab} y a largo plazo queda igual.`,s:`Suma ${f0(r.gW)} pts en ${H.wkLab} sin cambiar tu futuro. Es una buena jugada si el rival no es el que más sube.`};
+  if(sl<0&&sw>0)return {t:'bad',h:'Solo te sirve esta semana.',s:`Ganas ${f0(r.gW)} en ${H.wkLab}, pero pierdes ${f0(-l)} pts por semana a largo plazo. Yo no la aceptaría.`};
+  if(sl===0&&sw===0)return {t:'mid',h:'Es casi parejo.',s:`Cambia menos de ${E} pts por semana para ti. Acéptala solo si te gusta uno de los jugadores o te llena una necesidad.`};
+  if(sl===0&&sw<0)return {t:'mid',h:`Te cuesta ${H.wkLab} (${f0(-r.gW)}) y a largo plazo queda igual.`,s:'No hay razón para aceptarla si no te llena una necesidad.'};
+  return {t:'bad',h:'Recházala.',s:`Pierdes ${f0(-l)} pts por semana a largo plazo${sw<0?` y ${f0(-r.gW)} en ${H.wkLab}`:''}.`};
+}
+function offerView(){
+  const o=st.tro||(st.tro={f:0,g:[],q:[]}),A=trTeam(S.me);
+  const frs=S.teams.filter(t=>t.id!==S.me);
+  if(!o.f||!frs.some(t=>t.id===o.f))o.f=frs[0].id;
+  const B=trTeam(o.f),ps=T=>[...T.E].sort((a,b)=>b.l.e-a.l.e);
+  o.g=o.g.filter(n=>A.by[n]);o.q=o.q.filter(n=>B.by[n]);
+  const chip=(e,att,on)=>`<button class="chip sm ${on?'on':''}" ${att}="${esc(e.n)}">${esc(e.n)}${st.prot.has(e.n)&&att==='data-og'?' 🔒':''}${e.out?' · fuera':''}</button>`;
+  const form=`<div class="glass card">@@BAR@@<h3>Mi oferta</h3><div class="note" style="margin:6px 0 10px">Mete lo que te propone un amigo, o lo que quieres proponer. Toca hasta 2 jugadores de cada lado. Los 🔒 son tus intocables: puedes evaluarlos, pero aviso.</div>
+    <div class="chips sc">${frs.map(t=>`<button class="chip ${o.f===t.id?'on':''}" data-trf2="${t.id}">${esc(tn(t))}</button>`).join('')}</div>
+    <div class="note" style="margin:12px 0 6px"><b>Tú das</b></div><div class="chips">${ps(A).map(e=>chip(e,'data-og',o.g.includes(e.n))).join('')}</div>
+    <div class="note" style="margin:12px 0 6px"><b>Recibes de ${esc(trName(o.f))}</b></div><div class="chips">${ps(B).map(e=>chip(e,'data-oq',o.q.includes(e.n))).join('')}</div></div>`;
+  let res='',bar='<div class="trbar"><div class="grow note">Elige jugadores de cada lado para ver el veredicto.</div></div>';
+  if(o.g.length&&o.q.length){
+    const r=trEval(o.f,o.g,o.q),v=trVerdict(r),H=trHor(),key=r.key,pr=r.G.filter(n=>st.prot.has(n)),rh=r.rho.min;
+    const fv=rh>=1.10?'por nombre y promedio le conviene bastante; es fácil que la acepte (o que él mismo la proponga).':rh>=0.97?'se ve parejo por nombre y promedio; es razonable que la acepte.':rh>=0.93?'se ve algo en su contra por nombre y promedio; puede pedirte un poco más.':'se ve claramente en su contra por nombre y promedio; difícilmente la acepte así.';
+    let cn=trCache().cnt||(trCache().cnt={});
+    if(!cn[key])cn[key]=trCounterRes(o.f,r,trCounters(o.f,o.g,o.q));
+    const txt=x=>{const t=x.v.txt;return t.k==='addq'?`Pídele además a <b>${esc(t.n)}</b>`:t.k==='swq'?`Pide a <b>${esc(t.n)}</b> en lugar de ${esc(t.o)}`:t.k==='swg'?`Da a <b>${esc(t.n)}</b> en lugar de ${esc(t.o)}`:t.k==='rmg'?`Da solo a ${trJoin(x.r.G)} (sin ${esc(t.n)})`:`Pide solo a ${trJoin(x.r.Q)} (sin ${esc(t.n)})`};
+    const ctr=cn[key].length?cn[key].map(x=>`<div class="item"><div class="grow"><div class="nm" style="font-weight:600">${txt(x)}</div><div class="meta">Tú: semana ${trSg(x.r.gW)} · largo ${trSg(x.r.gL)}/sem (antes ${trSg(r.gW)} · ${trSg(r.gL)}) · aceptación ${TR_ACC[x.r.acc].toLowerCase()}</div></div><button class="chip" data-tload="${esc(x.r.key)}">Probar</button></div>`).join(''):`<div class="note" style="padding:6px 0">No encontré una variante que te mejore y que a tu amigo le siga pareciendo razonable.</div>`;
+    const saved=trSaved().some(s=>s.key===key);
+    bar=`<div class="trbar"><div class="grow"><div class="note">${o.g.map(esc).join(' + ')} → ${o.q.map(esc).join(' + ')}</div><div style="font-size:14px;line-height:1.3"><b>${v.h}</b></div><div class="note">${H.wkLab.replace(/^./,c=>c.toUpperCase())} ${trSg(r.gW)} · largo plazo ${trSg(r.gL)}/sem</div></div><button class="chip sm on" data-tgo="1">Detalle ↓</button></div>`;
+    res=`<div class="glass card" id="trres"><h3>Veredicto</h3><div class="verdict"><b>${v.h}</b></div><div class="note" style="margin-top:6px">${v.s}</div>
+      ${pr.length?`<div class="note" style="margin-top:6px">Ojo: das a ${pr.map(esc).join(' y ')}, ${pr.length>1?'que son intocables tuyos':'uno de tus intocables'}.</div>`:''}
+      <div class="hero" style="margin-top:14px"><div class="stat"><div class="lab">${H.wkLab.replace(/^./,c=>c.toUpperCase())}</div><div class="big">${trSg(r.gW)}</div><div class="note">pts esperados</div></div><div class="stat"><div class="lab">Largo plazo</div><div class="big">${trSg(r.gL)}</div><div class="note">pts por semana</div></div></div>
+      <div class="note" style="margin-top:12px">Para ${esc(trName(o.f))}: ${fv}</div>
+      <div class="row" style="gap:8px;margin-top:12px;flex-wrap:wrap"><button class="chip" data-tsave="${esc(key)}">${saved?'Guardada ✓':'Guardar oferta'}</button></div></div>
+      <div class="glass card"><h3>Qué pedir para mejorarla</h3><div class="note" style="margin:6px 0 4px">Variantes que a ti te dejan mejor y que a ${esc(trName(o.f))} le siguen pareciendo razonables.</div>${ctr}</div>`+trDetail(r,key);
+  }else res=`<div class="glass card"><div class="note">Elige al menos un jugador de cada lado para ver el veredicto.</div></div>`;
+  const sv=trSaved();
+  const list=sv.length?`<div class="glass card"><h3>Ofertas guardadas</h3><div class="note" style="margin:6px 0 4px">Se guardan solo en este celular.</div>${sv.map((s,i)=>{
+    let line='';try{const r=trEval(s.f,s.g,s.q),v=trVerdict(r);line=`${v.h} (semana ${trSg(r.gW)} · largo ${trSg(r.gL)}/sem)`}catch(_){line='Ya no se puede evaluar: cambió algún roster.'}
+    return `<div class="item"><div class="grow"><div class="note"><b>${esc(trName(s.f))}</b></div><div class="nm" style="font-weight:600">Das: ${s.g.map(esc).join(' + ')}</div><div class="nm" style="font-weight:600">Recibes: ${s.q.map(esc).join(' + ')}</div><div class="meta">${line}</div></div><div style="display:flex;flex-direction:column;gap:6px"><button class="chip" data-topen="${i}">Abrir</button><button class="chip" data-tdel="${i}">Borrar</button></div></div>`}).join('')}</div>`:'';
+  return form.replace('@@BAR@@',bar)+res+list;
+}
+function trTap(d){                              // lo que hacen los botones de Traits; devuelve true si lo manejó
+  if(d.trm){st.trm=d.trm;render();return true}
+  if(d.trf!==undefined){st.trf=Number(d.trf)||0;render();return true}
+  if(d.trd){st.trd=d.trd;render();return true}
+  if(d.trf2){st.tro={f:Number(d.trf2),g:[],q:[]};render();return true}
+  if(d.og||d.oq){const o=st.tro,k=d.og?'g':'q',n=d.og||d.oq;o[k]=o[k].includes(n)?o[k].filter(x=>x!==n):[...o[k],n].slice(-2);render();return true}
+  if(d.tsave){const a=trSaved(),o=st.tro;if(a.some(s=>s.key===d.tsave))return true;a.unshift({key:d.tsave,f:o.f,g:[...o.g],q:[...o.q]});trSaveList(a);render();return true}
+  if(d.topen!==undefined){const s=trSaved()[Number(d.topen)];if(s){st.tro={f:s.f,g:[...s.g],q:[...s.q]};render();window.scrollTo(0,0)}return true}
+  if(d.tdel!==undefined){const a=trSaved();a.splice(Number(d.tdel),1);trSaveList(a);render();return true}
+  if(d.tload){const key=d.tload,i=key.indexOf('|'),j=key.indexOf('>');st.tro={f:Number(key.slice(0,i)),g:key.slice(i+1,j).split(',').filter(Boolean),q:key.slice(j+1).split(',').filter(Boolean)};st.tab='trade';st.trm='o';
+    if(st.sheet){st.sheetStack=[];st.sheet=null;renderSheet();try{if(history.state&&history.state.sheet)history.back()}catch(_){}}render();window.scrollTo(0,0);return true}
+  if(d.tgo){const e=document.getElementById('trres');if(e)e.scrollIntoView({behavior:'smooth',block:'start'});return true}
+  if(d.tcopy){const el=document.getElementById('trpitch');if(el){const t=el.textContent;try{navigator.clipboard.writeText(t).then(()=>{},()=>{})}catch(_){}
+    try{const rg=document.createRange();rg.selectNodeContents(el);const s=window.getSelection();s.removeAllRanges();s.addRange(rg)}catch(_){}
+    const b=document.querySelector('[data-tcopy]');if(b){b.textContent='Copiado (o mantén presionado el texto)';setTimeout(()=>{if(b)b.textContent='Copiar mensaje'},2500)}}return true}
+  return false;
+}
+
+/*TR-END*/
+const TABS=[['roster','Roster'],['liga','Liga'],['agents','Agentes'],['plan','Plan'],['gold','Minas'],['trade','Traits']];
 /* ---------- hojas de detalle ---------- */
 const barRow=(l,v,max)=>`<div class="row" style="padding:4px 0"><div style="width:86px" class="note">${l}</div><div class="grow"><div class="bar"><i style="width:${v==null?0:Math.max(3,Math.min(100,v/max*100))}%"></i></div></div><div class="num" style="width:44px;text-align:right"><b>${f1(v)}</b></div></div>`;
 function schedRows(p,hd){
@@ -1179,7 +1682,7 @@ function renderSheet(){
   const el=document.getElementById('sheet'); if(!el)return;
   const s=st.sheet;
   if(!s){el.innerHTML='';el.className='';document.body.style.overflow='';return}
-  const body=s.t==='sw'?swapSheet(s.a,s.d,s.k):s.t==='rd'?radarSheet(s.n):s.t==='ds'?daySheet(s.a,s.d,s.day):playerSheet(s.n);
+  const body=s.t==='tr'?tradeSheet(s.k):s.t==='sw'?swapSheet(s.a,s.d,s.k):s.t==='rd'?radarSheet(s.n):s.t==='ds'?daySheet(s.a,s.d,s.day):playerSheet(s.n);
   const keep=el.firstElementChild?el.scrollTop:0;
   el.className='open';
   el.innerHTML=`<div class="wrap"><div class="shbar"><button class="arrow" id="back" aria-label="Atrás">‹</button><div class="note">Desliza hacia la derecha para volver</div></div>${body}</div>`;
@@ -1193,7 +1696,7 @@ function closeSheet(fromPop){
 }
 
 function render(){
-  const body=st.tab==='roster'?rosterView():st.tab==='liga'?ligaView():st.tab==='agents'?agentsView():st.tab==='plan'?planView():minasView();
+  const body=st.tab==='roster'?rosterView():st.tab==='liga'?ligaView():st.tab==='agents'?agentsView():st.tab==='plan'?planView():st.tab==='trade'?tradesView():minasView();
   const ae=document.activeElement, keepF=ae&&ae.id==='rq', cp=keepF?ae.selectionStart:0;
   $('#app').innerHTML=header()+body;
   if(keepF){const n=$('#rq');if(n){n.focus();try{n.setSelectionRange(cp,cp)}catch(_){}}}
@@ -1229,17 +1732,19 @@ async function load(manual){
 }
 if(typeof document!=='undefined'){
   document.addEventListener('click',e=>{
-    const tp=e.target.closest('[data-pl],[data-sw],[data-rd],[data-ds],[data-goad]');
+    const tp=e.target.closest('[data-pl],[data-sw],[data-rd],[data-ds],[data-goad],[data-tr]');
     if(tp&&!e.target.closest('[data-prot]')){
       if(tp.dataset.goad){st.tab='agents';st.ad=tp.dataset.goad;if(st.sheet){st.sheetStack=[];st.sheet=null;renderSheet()}render();window.scrollTo(0,0);}
       else if(tp.dataset.ds){const [a,d,day]=tp.dataset.ds.split('|');openSheet({t:'ds',a,d,day});}
       else if(tp.dataset.sw){const [a,d,k]=tp.dataset.sw.split('|');openSheet({t:'sw',a,d,k});}
       else if(tp.dataset.rd){openSheet({t:'rd',n:tp.dataset.rd});}
+      else if(tp.dataset.tr){openSheet({t:'tr',k:tp.dataset.tr});}
       else openSheet({t:'pl',n:tp.dataset.pl});
       return;
     }
     const t=e.target.closest('button'); if(!t)return;
     if(t.id==='back'){closeSheet();return}
+    if(trTap(t.dataset))return;
     if(t.dataset.tab){st.tab=t.dataset.tab;render();window.scrollTo(0,0);}
     else if(t.id==='refresh')load(true);
     else if(t.id==='prev'&&st.di>0){st.di--;render();}

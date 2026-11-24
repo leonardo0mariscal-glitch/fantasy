@@ -135,6 +135,46 @@ def avail(p): return 0 if p["inj"] in ("O", "IR", "SUS") else (0.6 if p["inj"] =
 def sp_date(sp): return ANCHOR_DATE + timedelta(days=sp - ANCHOR_SP)
 def key(d): return d.strftime("%m-%d")
 
+def league_extra(d, mu):
+    """Datos de la liga que usa la pestana Traits: tamano del roster, rival de cada semana y reglas de intercambio.
+    Todo es opcional: si ESPN no lo da (o cambia el formato) se omite y la app usa valores por defecto."""
+    x = {}
+    st = d.get("settings") or {}
+    try:
+        cnt = (st.get("rosterSettings") or {}).get("lineupSlotCounts") or {}
+        rs = sum(int(v) for v in cnt.values() if isinstance(v, (int, float)) and v > 0)
+        if 12 <= rs <= 25: x["rs"] = rs
+        ir = cnt.get("13")
+        if isinstance(ir, (int, float)) and 0 <= ir <= 5: x["ir"] = int(ir)
+    except Exception as e: print("rs fallo", type(e).__name__)
+    try:
+        ts = st.get("tradeSettings") or {}
+        tr = {}
+        dl = ts.get("deadlineDate")
+        if isinstance(dl, (int, float)) and dl > 0: tr["dl"] = datetime.fromtimestamp(dl / 1000, ET).strftime("%Y-%m-%d")
+        for k, n in (("revisionHours", "rev"), ("vetoVotesRequired", "veto")):
+            if isinstance(ts.get(k), (int, float)): tr[n] = int(ts[k])
+        if tr: x["tr"] = tr
+    except Exception as e: print("tr fallo", type(e).__name__)
+    try:
+        ss = st.get("scheduleSettings") or {}
+        ps = {}
+        if isinstance(ss.get("matchupPeriodCount"), int): ps["n"] = ss["matchupPeriodCount"]
+        if isinstance(ss.get("playoffTeamCount"), int): ps["po"] = ss["playoffTeamCount"]
+        if ps: x["ps"] = ps
+    except Exception as e: print("ps fallo", type(e).__name__)
+    try:
+        op = {}
+        for e in d.get("schedule", []):
+            m = e.get("matchupPeriodId")
+            if not isinstance(m, int) or m < mu or m > mu + 3: continue
+            h = (e.get("home") or {}).get("teamId"); a = (e.get("away") or {}).get("teamId")
+            if h is None or a is None: continue
+            op.setdefault(str(m), {})[str(h)] = a; op[str(m)][str(a)] = h
+        if op: x["op"] = op
+    except Exception as e: print("op fallo", type(e).__name__)
+    return x
+
 def main():
     s2, swid = os.environ.get("ESPN_S2", ""), os.environ.get("ESPN_SWID", "")
     if not s2 or not swid:
@@ -336,6 +376,8 @@ def main():
            "muD": f"{sp_date(c0).day}-{sp_date(c1).day} {MESES[sp_date(c1).month - 1]}", "me": ME,
            "cur": cur, "nxt": nxt, "spd": spd, "teams": teams, "fa": [x[1] for x in fas], "sched": sched, "gold": gold,
            "gs": gs, "gsd": today_k, "fs": extra, "tm": tm.get("d") or {}, "dbg": dbg}
+    try: out.update(league_extra(d, mu))
+    except Exception as e: print("league_extra fallo", type(e).__name__)
     with open("data.json", "w", encoding="utf-8") as f: json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
     # avisos de minas de oro (solo las nuevas)
     seen = state.get("gold", {}); nowts = int(time.time())
