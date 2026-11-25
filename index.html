@@ -119,19 +119,13 @@ ul.why,ol.why{margin:8px 0 0;padding-left:20px;font-size:14px}
 .seg[data-p="1"] i{transform:translateX(100%)}
 .seg button{font:600 13px var(--body);color:var(--text);background:none;border:0;border-radius:99px;padding:7px 14px;cursor:pointer;transition:color .2s;white-space:nowrap}
 .seg button.on{color:#fff}
-.mwrap{position:relative}
-.mbtn{font:600 13px var(--body);color:var(--text);background:rgba(255,255,255,.75);border:1px solid var(--line);border-radius:99px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.mbtn{position:relative;display:inline-flex;align-items:center;gap:5px;font:600 13px var(--body);color:var(--text);background:rgba(255,255,255,.75);border:1px solid var(--line);border-radius:99px;padding:7px 12px;white-space:nowrap}
+.mbtn[hidden]{display:none}
 .chv{display:inline-block;font-size:11px;transform:translateY(-2px);opacity:.7}
-.pmenu{position:absolute;z-index:20;right:0;top:calc(100% + 8px);min-width:190px;padding:6px;border-radius:18px;background:#f4f4f6;border:1px solid rgba(0,0,0,.08);box-shadow:0 14px 34px rgba(0,0,0,.25);animation:pm .16s ease-out;transform-origin:top right}
-@keyframes pm{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
-.pmenu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:600 15px var(--body);color:var(--text);background:none;border:0;border-radius:12px;padding:11px 12px;cursor:pointer}
-.pmenu button:active{background:rgba(0,0,0,.07)}
-.pmenu button span{flex:1}.pmenu button small{display:block;font:500 12px var(--body);color:var(--mut);margin-top:2px}.pmenu button em{font-style:normal;font-weight:500;color:var(--mut);font-variant-numeric:tabular-nums}
-.pmenu button b{width:16px;text-align:center}
 .oppw{position:relative}
-button.opp{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+select.ovl{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;font-size:16px;cursor:pointer;-webkit-appearance:none;appearance:none;z-index:2;-webkit-tap-highlight-color:transparent}
 .tiny{font-size:11px;opacity:.8}
-@media (prefers-reduced-motion:reduce){.seg i,.pmenu{animation:none;transition:none}}
+@media (prefers-reduced-motion:reduce){.seg i{transition:none}}
 
 .trbar{position:sticky;top:8px;z-index:6;display:flex;align-items:center;gap:10px;padding:10px 12px;margin:0 0 12px;border-radius:18px;background:#ecedf0;border:1px solid rgba(0,0,0,.1);box-shadow:0 6px 18px rgba(0,0,0,.16)}
 .trbar .grow{overflow-wrap:anywhere}
@@ -139,16 +133,11 @@ button.opp{display:block;width:100%;text-align:left;font:inherit;color:inherit;b
 .sbox:focus{border-color:#0c0c0e;box-shadow:0 0 0 3px rgba(12,12,14,.1)}
 .dim{opacity:.55}
 .val .sub{font:600 11px var(--body);color:var(--mut);letter-spacing:0}
-.hero.three{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.hero.three .stat .big{font-size:clamp(28px,9.2vw,42px)}
-.hero.three .stat .lab{font-size:10.5px;letter-spacing:.03em}
-.hero.three .stat .note{font-size:11px}
 
 /* Modo oscuro: sigue la configuración del teléfono. Fondo gris muy oscuro, tarjetas gris oscuro, y lo que era negro pasa a un gris más claro. */
 @media (prefers-color-scheme:dark){
 .trbar{background:#2a2b2f;border-color:rgba(255,255,255,.14)}
 .seg{background:rgba(255,255,255,.1)}.seg i{background:#6a6c74}.mbtn{background:rgba(255,255,255,.08)}
-.pmenu{background:#2d2e33;border-color:rgba(255,255,255,.14)}.pmenu button:active{background:rgba(255,255,255,.1)}
 :root{--ink:#f1f2f4;--bg:#121315;--text:#ececef;--mut:#9b9ea7;--line:rgba(255,255,255,.12);--amber:#ececef;--good:#ececef;--warn:#b8bac1;--bad:#ececef;color-scheme:dark}
 body{background-image:linear-gradient(115deg,#1c1d20 0%,#111214 22%,#191a1d 38%,#27282c 58%,#131416 74%,#222326 100%)}
 .glass{background:linear-gradient(145deg,rgba(255,255,255,.11),rgba(255,255,255,.04) 50%,rgba(255,255,255,.08));border:1px solid rgba(255,255,255,.14);
@@ -196,7 +185,7 @@ const SNAP0 = {"u":"2026-11-21T19:45-05:00","sp":33,"mu":5,"muD":"16-22 nov","me
 
 /* ---------- lógica ---------- */
 let S = SNAP0;
-const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',hm:'live',hp:'w',hr:0,hmenu:null,mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',trs:'',trp:'1',tos:'o',toj:{d:'q',f:0,q:[],g:[],m:'w',pf:0},tro:{f:0,g:[],q:[]}};
+const st = {tab:'roster', view:'day', wk:'c', di:0, h:'n', pos:'ALL', hide:false, dtd:0.6, prot:new Set(['Austin Reaves','Shai Gilgeous-Alexander','Alperen Sengun']), ai:'', aiBusy:false, auto:null,refBusy:false,refMsg:'',rmode:'live',hm:'live',hp:'w',hr:0,pick:0,dirty:false,mt:'gold',q:'',rh:'l',ad:null,trm:'w',trf:0,trd:'m',trs:'',trp:'1',tos:'o',toj:{d:'q',f:0,q:[],g:[],m:'w',pf:0},tro:{f:0,g:[],q:[]}};
 try{ const p=JSON.parse(localStorage.getItem('leo_prot')||'null'); if(Array.isArray(p)) st.prot=new Set(p); }catch(e){}
 try{ const h=JSON.parse(localStorage.getItem('leo_hero')||'null'); if(h){ if(h.hm==='exp')st.hm='exp'; if(h.hp==='d')st.hp='d'; if(Number.isInteger(h.hr))st.hr=h.hr; } }catch(e){}
 
@@ -404,15 +393,12 @@ function heroState(){
   const lab=auto?(opp.v!=null&&mine.v!=null&&opp.v>mine.v?'Líder':'Segundo lugar'):'Contra';
   return {m,p,me,mine,opp,others,all,rank,lab,auto};
 }
-function heroMenu(H){
-  if(st.hmenu==='p')return `<div class="pmenu" role="menu">${[['d','Hoy','cómo terminas el día'],['w','Semana','cómo terminas la semana']].map(([k,l,d])=>`<button role="menuitem" data-hp="${k}"><span>${l}<small>${d}</small></span><b>${H.p===k?'✓':''}</b></button>`).join('')}</div>`;
-  return '';
-}
-function heroOppMenu(H){
-  if(st.hmenu!=='r')return '';
-  const row=(k,l,v)=>`<button role="menuitem" data-hr="${k}"><span>${l}</span><em>${v}</em><b>${(k===0?H.auto:(!H.auto&&H.opp.t.id===k))?'✓':''}</b></button>`;
+const optHtml=o=>o.map(([v,l,sel])=>`<option value="${v}"${sel?' selected':''}>${esc(l)}</option>`).join('');
+function heroOpts(H){      // opciones de los selectores nativos del teléfono
+  const p=[['d','Hoy · cómo termina el día'],['w','Semana · cómo termina la semana']].map(([k,l])=>[k,l,H.p===k]);
   const top=H.others[0];
-  return `<div class="pmenu r" role="menu">${row(0,'Automático',hvTxt(top.v,H.m))}${H.others.map(x=>row(x.t.id,esc(tn(x.t)),hvTxt(x.v,H.m))).join('')}</div>`;
+  const r=[['0','Automático · '+hvTxt(top.v,H.m),H.auto]].concat(H.others.map(x=>[String(x.t.id),tn(x.t)+' · '+hvTxt(x.v,H.m),!H.auto&&H.opp.t.id===x.t.id]));
+  return {p,r};
 }
 function heroParts(){
   const H=heroState(),{m,p,mine,opp}=H,live=m==='live';
@@ -425,33 +411,36 @@ function heroParts(){
   const opNote=esc(tn(opp.t))+(sub(opp)?'<br>'+sub(opp):'');
   const gap=(mine.v!=null&&opp.v!=null)?mine.v-opp.v:null,g=gap==null?null:Math.round(gap);
   const gl=live?(g==null||g>=0?'Ventaja':'Diferencia'):(g==null||g>=0?'Ventaja esperada':'Diferencia esperada');
-  const body=`<div class="hero">
-     <div class="stat"><div class="lab">${live?'Tus puntos':(p==='d'?'Esperados hoy':'Esperados semana')}</div><div class="big">${hvTxt(mine.v,m)}</div><div class="note">${myNote}</div></div>
-     <div class="stat oppw"><button class="opp" data-hmenu="r" aria-haspopup="menu" aria-expanded="${st.hmenu==='r'}"><div class="lab">${H.lab} <span class="chv">⌄</span></div><div class="big">${hvTxt(opp.v,m)}</div><div class="note">${opNote}</div></button>${heroOppMenu(H)}</div>
-     <div class="gap"><span class="mut">${gl}</span><span class="big" style="font-size:28px">${g==null?'–':(g>=0?'+':'−')+Math.abs(g)}</span></div>
-   </div>`;
+  const mineH=`<div class="lab">${live?'Tus puntos':(p==='d'?'Esperados hoy':'Esperados semana')}</div><div class="big">${hvTxt(mine.v,m)}</div><div class="note">${myNote}</div>`;
+  const oppH=`<div class="lab">${H.lab} <span class="chv">⌄</span></div><div class="big">${hvTxt(opp.v,m)}</div><div class="note">${opNote}</div>`;
+  const gapH=`<span class="mut">${gl}</span><span class="big" style="font-size:28px">${g==null?'–':(g>=0?'+':'−')+Math.abs(g)}</span>`;
   const old=(Date.now()-Date.parse(S.u))>2*3600*1000;
   const note=`Última lectura de ESPN ${ageText()}.${old?' <b style="color:var(--warn)">Desactualizados:</b> el robot no ha corrido.':''}${st.refMsg?' '+esc(st.refMsg):''}${live?'':'<br>Esperado = puntos de la semana que llevas + lo que falta hasta '+(p==='d'?'que termine hoy':'el domingo')+'. Hoy cuenta la alineación que cada quien tiene puesta; los demás días, la mejor alineación posible de cada uno.'}`;
-  const mw=live?'':`<button class="mbtn" data-hmenu="p" aria-haspopup="menu" aria-expanded="${st.hmenu==='p'}">${HP_LAB[H.p]} <span class="chv">⌄</span></button>${heroMenu(H)}`;
-  return {pos:live?0:1,body,note,mw};
+  return {pos:live?0:1,live,pLab:HP_LAB[H.p],mine:mineH,opp:oppH,gap:gapH,note,opts:heroOpts(H)};
 }
 function heroCard(){
   const P=heroParts();
-  return `<div class="glass card" id="hero"><div class="htop"><div class="seg" data-p="${P.pos}"><i></i><button data-hm="live" class="${P.pos===0?'on':''}">Live</button><button data-hm="exp" class="${P.pos===1?'on':''}">Esperados</button></div><div class="mwrap">${P.mw}</div></div><div id="herobody">${P.body}</div><div class="note" id="heronote" style="margin-top:8px">${P.note}</div></div>`;
+  return `<div class="glass card" id="hero"><div class="htop"><div class="seg" data-p="${P.pos}"><i></i><button data-hm="live" class="${P.pos===0?'on':''}">Live</button><button data-hm="exp" class="${P.pos===1?'on':''}">Esperados</button></div><label class="mbtn" id="hpw"${P.live?' hidden':''}><span id="hplab">${P.pLab}</span><span class="chv">⌄</span><select class="ovl" id="hsp" data-hsel="p" aria-label="Ver hoy o la semana">${optHtml(P.opts.p)}</select></label></div><div class="hero"><div class="stat" id="hmine">${P.mine}</div><div class="stat oppw"><div id="hopp">${P.opp}</div><select class="ovl" id="hsr" data-hsel="r" aria-label="Elegir con quién compararte">${optHtml(P.opts.r)}</select></div><div class="gap" id="hgap">${P.gap}</div></div><div class="note" id="heronote" style="margin-top:8px">${P.note}</div></div>`;
+}
+function syncSel(sel,opts){   // actualiza el selector sin reemplazarlo (si está abierto no se cierra)
+  if(!sel)return;
+  if([...sel.options].map(o=>o.value).join('|')!==opts.map(o=>o[0]).join('|')){sel.innerHTML=optHtml(opts);return}
+  opts.forEach(([v,l],i)=>{if(sel.options[i].textContent!==l)sel.options[i].textContent=l});
+  const on=opts.find(o=>o[2]);if(on&&sel.value!==on[0])sel.value=on[0];
 }
 function updHero(){
   const h=document.getElementById('hero');if(!h){render();return}
-  const P=heroParts(),seg=h.querySelector('.seg');
+  const P=heroParts(),q=x=>h.querySelector(x),seg=q('.seg');
   if(seg){seg.dataset.p=P.pos;seg.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('on',i===P.pos))}
-  h.querySelector('.mwrap').innerHTML=P.mw;h.querySelector('#herobody').innerHTML=P.body;h.querySelector('#heronote').innerHTML=P.note;
+  q('#hpw').hidden=P.live;q('#hplab').textContent=P.pLab;
+  q('#hmine').innerHTML=P.mine;q('#hopp').innerHTML=P.opp;q('#hgap').innerHTML=P.gap;q('#heronote').innerHTML=P.note;
+  syncSel(q('#hsp'),P.opts.p);syncSel(q('#hsr'),P.opts.r);
 }
+const picking=()=>st.pick&&Date.now()-st.pick<60000;   // mientras el selector del teléfono está abierto no se redibuja la pantalla
 function heroSave(){try{localStorage.setItem('leo_hero',JSON.stringify({hm:st.hm,hp:st.hp,hr:st.hr}))}catch(_){}}
 function heroTap(t){        // devuelve true si el botón era del recuadro de arriba
   const d=t.dataset;
-  if(d.hm){st.hm=d.hm;if(st.hmenu==='p')st.hmenu=null;heroSave();updHero();return true}
-  if(d.hp){st.hp=d.hp;st.hmenu=null;heroSave();updHero();return true}
-  if(d.hr!==undefined){st.hr=Number(d.hr)||0;st.hmenu=null;heroSave();updHero();return true}
-  if(d.hmenu){st.hmenu=st.hmenu===d.hmenu?null:d.hmenu;updHero();return true}
+  if(d.hm){st.hm=d.hm;heroSave();updHero();return true}
   return false;
 }
 
@@ -1952,6 +1941,7 @@ function closeSheet(fromPop){
 }
 
 function render(){
+  if(picking()){st.dirty=true;return}
   const body=st.tab==='roster'?rosterView():st.tab==='liga'?ligaView():st.tab==='agents'?agentsView():st.tab==='plan'?planView():st.tab==='trade'?tradesView():minasView();
   const ae=document.activeElement, keepF=ae&&ae.id==='rq', cp=keepF?ae.selectionStart:0;
   $('#app').innerHTML=header()+body;
@@ -1988,7 +1978,6 @@ async function load(manual){
 }
 if(typeof document!=='undefined'){
   document.addEventListener('click',e=>{
-    if(st.hmenu&&!e.target.closest('.pmenu,[data-hmenu]')){st.hmenu=null;updHero()}
     const tp=e.target.closest('[data-pl],[data-sw],[data-rd],[data-ds],[data-goad],[data-tr]');
     if(tp&&!e.target.closest('[data-prot]')){
       if(tp.dataset.goad){st.tab='agents';st.ad=tp.dataset.goad;if(st.sheet){st.sheetStack=[];st.sheet=null;renderSheet()}render();window.scrollTo(0,0);}
@@ -2017,6 +2006,13 @@ if(typeof document!=='undefined'){
     else if(t.id==='hide'){st.hide=!st.hide;render();}
     else if(t.dataset.h){st.h=t.dataset.h;render();}
     else if(t.dataset.prot){const n=t.dataset.prot;st.prot.has(n)?st.prot.delete(n):st.prot.add(n);try{localStorage.setItem('leo_prot',JSON.stringify([...st.prot]))}catch(_){}render();}
+  });
+  document.addEventListener('focusin',e=>{if(e.target.matches&&e.target.matches('select[data-hsel]'))st.pick=Date.now()});
+  document.addEventListener('focusout',e=>{if(e.target.matches&&e.target.matches('select[data-hsel]')){st.pick=0;if(st.dirty){st.dirty=false;render()}}});
+  document.addEventListener('change',e=>{
+    const x=e.target;if(!x.matches||!x.matches('select[data-hsel]'))return;
+    if(x.dataset.hsel==='p')st.hp=x.value==='d'?'d':'w';else st.hr=Number(x.value)||0;
+    heroSave();updHero();
   });
   document.addEventListener('input',e=>{ if(e.target.id==='rq'){st.q=e.target.value;const r=$('#rres');if(r)r.innerHTML=radarResults();return} if(e.target.id==='dtd'){st.dtd=Number(e.target.value)/100;const v=$('#dtdv');if(v)v.textContent=e.target.value+'%';clearTimeout(window.__dt);window.__dt=setTimeout(render,250);} });
   window.addEventListener('popstate',()=>{if(st.sheet){st.sheetStack=[];st.sheet=null;renderSheet()}});
